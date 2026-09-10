@@ -1,0 +1,42 @@
+<Project>
+  <!-- Restrict submodule target frameworks to what this mod needs. The IL2CPP
+       interop DLLs in libs/ are modern .NET only, so net35/net40 builds fail. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'CameraUnlock.Core'">
+    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'CameraUnlock.Core.Unity'">
+    <TargetFrameworks>net48</TargetFrameworks>
+  </PropertyGroup>
+
+  <!-- IL2CPP interop DLLs in libs/ depend on Il2Cppmscorlib for base types.
+       CameraUnlock.Core.Unity doesn't know about IL2CPP, so inject it here. -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'CameraUnlock.Core.Unity'">
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>$(UnityEnginePath)\Il2Cppmscorlib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>$(UnityEnginePath)\Il2CppInterop.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Submodule files that use Mono-only Unity APIs incompatible with IL2CPP
+       interop. This mod uses none of them. -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'CameraUnlock.Core.Unity'">
+    <Compile Remove="Rendering\RenderPipelineHelper.cs" />
+    <Compile Remove="Tracking\CameraCallbackLifecycle.cs" />
+    <Compile Remove="Tracking\ViewMatrixTrackingController.cs" />
+    <Compile Remove="Utilities\GameUIFinder.cs" />
+    <Compile Remove="Extensions\UnityHotkeyHandler.cs" />
+    <Compile Remove="Utilities\CrosshairUtility.cs" />
+    <Compile Remove="Effects\HeadFollowLightRenderHook.cs" />
+  </ItemGroup>
+
+  <!-- UnityEngine.UI (UGUI) ships only inside a built Unity game and is not
+       redistributable, so it is not vendored. CrosshairUtility above is its only
+       consumer in the submodule and this mod does not use it. -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'CameraUnlock.Core.Unity'">
+    <Reference Remove="UnityEngine.UI" />
+  </ItemGroup>
+</Project>

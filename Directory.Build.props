@@ -1,0 +1,9 @@
+<Project>
+  <!-- Set UnityEnginePath and Il2CppInteropPath for all projects including submodules -->
+  <PropertyGroup Condition="'$(UnityEnginePath)' == ''">
+    <UnityEnginePath>$(MSBuildThisFileDirectory)src\BluePrinceHeadTracking\libs</UnityEnginePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Il2CppInteropPath)' == ''">
+    <Il2CppInteropPath>$(MSBuildThisFileDirectory)src\BluePrinceHeadTracking\libs</Il2CppInteropPath>
+  </PropertyGroup>
+</Project>

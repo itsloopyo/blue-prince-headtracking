@@ -1,0 +1,38 @@
+{
+  "schema_version": 2,
+  "mod_info": {
+    "name": "BluePrinceHeadTracking",
+    "version": "0.0.0",
+    "game_id": "blue-prince"
+  },
+  "strategy": "BepInEx6",
+  "delivery_mode": "manifest",
+
+  "loader": {
+    "archives": [
+      { "source": "vendor/bepinex/BepInEx_UnityIL2CPP_x64.zip", "dest": "" }
+    ],
+    "detect": [
+      "BepInEx/core/BepInEx.Core.dll",
+      "BepInEx/core/BepInEx.Unity.IL2CPP.dll"
+    ]
+  },
+
+  "files": [
+    {
+      "source": "plugins/BluePrinceHeadTracking.dll",
+      "target": "BepInEx/plugins/BluePrinceHeadTracking.dll"
+    },
+    {
+      "source": "plugins/CameraUnlock.Core.dll",
+      "target": "BepInEx/plugins/CameraUnlock.Core.dll"
+    },
+    {
+      "source": "plugins/CameraUnlock.Core.Unity.dll",
+      "target": "BepInEx/plugins/CameraUnlock.Core.Unity.dll"
+    }
+  ],
+
+  "runtime_requirements": [],
+  "dependencies": []
+}

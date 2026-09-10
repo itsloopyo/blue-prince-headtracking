@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>BluePrinceHeadTracking</AssemblyName>
+    <RootNamespace>BluePrinceHeadTracking</RootNamespace>
+    <Version>0.0.0</Version>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <OutputType>Library</OutputType>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <Authors>itsloopyo</Authors>
+    <Copyright>Copyright (c) 2026 itsloopyo</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Description>Head tracking mod for Blue Prince (Unity 6 IL2CPP) using CameraUnlock.Core</Description>
+    <!-- NU1702: CameraUnlock.Core.Unity targets .NET Framework but works fine with net6.0 -->
+    <NoWarn>$(NoWarn);NU1702</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\cameraunlock-core\csharp\src\CameraUnlock.Core\CameraUnlock.Core.csproj" />
+    <ProjectReference Include="..\..\cameraunlock-core\csharp\src\CameraUnlock.Core.Unity\CameraUnlock.Core.Unity.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.753" />
+    <PackageReference Include="UnityEngine.Modules" Version="2021.3.45" />
+    <PackageReference Include="Il2CppInterop.ReferenceLibs" Version="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="libs\**" />
+    <None Remove="libs\**" />
+  </ItemGroup>
+</Project>

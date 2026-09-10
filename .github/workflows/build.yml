@@ -1,0 +1,74 @@
+name: Build
+
+on:
+  # Markdown is NOT ignored: THIRD-PARTY-NOTICES.md is what the notices gate
+  # below reads, so a change that only edits it has to reach this workflow.
+  push:
+    branches: ['**']
+    paths-ignore:
+      - 'docs/**'
+      - 'LICENSE'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'LICENSE'
+
+jobs:
+  build:
+    name: Build and Validate
+    runs-on: windows-latest
+    # Checkout only; this job publishes nothing. Without this the job inherits
+    # the repository default, which on repos created before the read-only
+    # default hands every push - including one from a fork's PR head - a token
+    # that can write contents, packages and releases.
+    permissions:
+      contents: read
+    if: ${{ !startsWith(github.event.head_commit.message, 'Release v') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          submodules: recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup pixi
+        uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
+        with:
+          # This workspace declares no conda dependencies - pixi is a task
+          # runner over dotnet and PowerShell here. Skip 'pixi install' and the
+          # action's post-install 'pixi list', which exits 1 with "No packages
+          # found in 'default' environment" on an empty environment.
+          run-install: false
+
+      # Build + package through the SAME command a developer runs locally. Every
+      # build dependency is produced by scripts/setup-libs.ps1 inside the pixi
+      # task chain - no build logic lives in this workflow, so local and CI
+      # can't drift.
+      - name: Build and package
+        shell: pwsh
+        run: pixi run package
+
+      - name: Verify installer was produced
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem release/*-installer.zip -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $zip) {
+            Write-Host "::error::No installer ZIP was produced by 'pixi run package'"
+            exit 1
+          }
+
+      # The package's own content gates, through the same pixi tasks a developer
+      # runs. The step above only proves a ZIP exists; these read what is in it.
+      - name: Validate package manifest
+        shell: pwsh
+        run: pixi run validate-manifest
+
+      - name: Validate third-party notices
+        shell: pwsh
+        run: pixi run validate-notices
