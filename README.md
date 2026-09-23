@@ -12,7 +12,7 @@ An unofficial head tracking mod for Blue Prince that moves the view with your he
 
 ## Requirements
 
-- [Blue Prince](https://store.steampowered.com/app/1569580/Blue_Prince/) on Windows. Built and tested against the Xbox app / Game Pass build, package version 1.1.11.0, installed at `C:\XboxGames\Blue Prince\Content`. The Steam and Epic builds have not been run here.
+- [Blue Prince](https://store.steampowered.com/app/1569580/Blue_Prince/) on Windows. Built and tested against the Xbox Game Pass build, package version 1.1.11.0, installed at `C:\XboxGames\Blue Prince\Content`. The Steam and Epic builds have not been run here.
 - A tracking source: [OpenTrack](https://github.com/opentrack/opentrack/releases) with a webcam, a phone app, or any other tracker that sends the OpenTrack UDP protocol.
 - Windows 10 or 11, 64-bit.
 
@@ -22,9 +22,16 @@ The first launch after installing takes noticeably longer than usual. BepInEx ge
 
 ## Installation
 
+### Lopari
+
+Download [Lopari](https://lopari.app), choose **Blue Prince**, and click
+**Play with head tracking**.
+
+### Standalone Installer
+
 1. Download `BluePrinceHeadTracking-vX.Y.Z-installer.zip` from the [Releases page](https://github.com/itsloopyo/blue-prince-headtracking/releases).
 2. Extract it anywhere.
-3. Double-click `install.cmd`. It finds the game, lays down BepInEx and copies the mod in. Auto-detection covers the Xbox app / Game Pass install; on Steam or Epic, pass the game folder to `install.cmd` as shown below.
+3. Double-click `install.cmd`. It finds the game, lays down BepInEx and copies the mod in. Auto-detection covers the Xbox Game Pass install; on Steam or Epic, pass the game folder to `install.cmd` as shown below.
 4. Configure OpenTrack (or your phone app) to send UDP to `127.0.0.1:4242`. See [Setting Up OpenTrack](#setting-up-opentrack).
 5. Launch the game.
 
@@ -53,7 +60,7 @@ If you would rather not run the installer, the ZIP contains everything:
 2. Launch the game once and quit, so BepInEx creates `BepInEx/plugins`.
 3. Copy `plugins/BluePrinceHeadTracking.dll`, `plugins/CameraUnlock.Core.dll` and `plugins/CameraUnlock.Core.Unity.dll` into `BepInEx/plugins`.
 
-On the Xbox app / Game Pass build the game folder is `Blue Prince\Content` inside the `XboxGames` folder, on whichever drive you let the Xbox app install to.
+On the Xbox Game Pass build the game folder is `Blue Prince\Content` inside the `XboxGames` folder, on whichever drive you let the Xbox app install to.
 
 ## Setting Up OpenTrack
 
