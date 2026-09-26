@@ -51,3 +51,26 @@ Copy-Item (Join-Path $unityModulesDir '*.dll') $libsPath -Force
 
 $dlls = Get-ChildItem $libsPath -Filter '*.dll'
 Write-Host "Populated $($dlls.Count) DLLs in $libsPath" -ForegroundColor Green
+
+# The config tests run the legacy .cfg import on the BepInEx.Core the game runs, the one in the
+# vendored loader archive, rather than the NuGet build the plugin compiles against.
+# The published reader the differential test runs saves, and ConfigFile.Save loads SemanticVersioning.
+$testLibsPath = Join-Path $projectRoot "tests/BluePrinceHeadTracking.Tests/libs"
+New-Item -ItemType Directory -Path $testLibsPath -Force | Out-Null
+Get-ChildItem $testLibsPath -Filter '*.dll' -File | Remove-Item -Force
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$loaderZip = Join-Path $projectRoot "vendor/bepinex/BepInEx_UnityIL2CPP_x64.zip"
+$archive = [System.IO.Compression.ZipFile]::OpenRead($loaderZip)
+try {
+    foreach ($name in @('BepInEx.Core.dll', 'SemanticVersioning.dll')) {
+        $entry = $archive.Entries | Where-Object { $_.FullName -eq "BepInEx/core/$name" }
+        if (-not $entry) {
+            throw "BepInEx/core/$name is not in $loaderZip"
+        }
+        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, (Join-Path $testLibsPath $name), $true)
+    }
+} finally {
+    $archive.Dispose()
+}
+Write-Host "Extracted the vendored BepInEx.Core.dll and SemanticVersioning.dll into $testLibsPath" -ForegroundColor Green

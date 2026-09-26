@@ -6,3 +6,7 @@
 *.gif binary
 *.zip binary
 *.dll binary
+
+# Differential test inputs and the oracle are compared byte for byte, line endings included.
+tests/config_differential/data/** -text
+tests/config_differential/oracle/** -text

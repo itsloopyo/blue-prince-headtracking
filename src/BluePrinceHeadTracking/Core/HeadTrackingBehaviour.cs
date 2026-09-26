@@ -72,24 +72,24 @@ public class HeadTrackingBehaviour : MonoBehaviour
     private bool _seenTrackerData;
 
     internal void Initialize(OpenTrackReceiver receiver, TrackingProcessor processor,
-        PositionProcessor positionProcessor, PositionInterpolator positionInterpolator, PluginConfig config)
+        PositionProcessor positionProcessor, PositionInterpolator positionInterpolator, ModConfig config)
     {
         _receiver = receiver;
         _processor = processor;
         _positionProcessor = positionProcessor;
         _positionInterpolator = positionInterpolator;
 
-        _trackingEnabled = config.EnabledOnStartup.Value;
-        _worldSpaceYaw = config.WorldSpaceYaw.Value;
-        _positionEnabled = config.PositionEnabled.Value;
-        _showReticle = config.ShowReticle.Value;
-        _pauseOnLostFocus = config.PauseOnLostFocus.Value;
-        _collisionEnabled = config.CollisionEnabled.Value;
+        _trackingEnabled = config.EnabledOnStartup;
+        _worldSpaceYaw = config.WorldSpaceYaw;
+        _positionEnabled = config.PositionEnabled;
+        _showReticle = config.ShowReticle;
+        _pauseOnLostFocus = config.PauseOnLostFocus;
+        _collisionEnabled = config.CollisionEnabled;
 
         _leanClamp = new LeanClamp(
-            config.CollisionRadius.Value,
+            config.CollisionRadius,
             Physics.DefaultRaycastLayers,
-            config.CollisionReleaseSmoothing.Value);
+            config.CollisionReleaseSmoothing);
 
         _cameraFinder = new CameraFinder();
         _cameraFinder.OnCameraChanged += OnCameraChanged;
@@ -100,7 +100,7 @@ public class HeadTrackingBehaviour : MonoBehaviour
         _stateDetector = new GameplayStateDetector();
         _stateDetector.OnGameplayStateChanged += OnGameplayStateChanged;
 
-        bool diagnosticLogging = config.DiagnosticLogging.Value;
+        bool diagnosticLogging = config.DiagnosticLogging;
         RigProbe.Enabled = diagnosticLogging;
         _stateDetector.DiagnosticLogging = diagnosticLogging;
 

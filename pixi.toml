@@ -12,7 +12,11 @@ restore = "dotnet restore src/BluePrinceHeadTracking/BluePrinceHeadTracking.cspr
 setup = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/setup-libs.ps1", depends-on = ["restore"] }
 build = { cmd = "dotnet build src/BluePrinceHeadTracking/BluePrinceHeadTracking.csproj -c Release -m:1", depends-on = ["setup"] }
 install = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 Release", depends-on = ["build"] }
-package = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["build"] }
+package = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["test"] }
+# The config tests, among them the differential test in tests/config_differential, which holds
+# the frozen legacy reader to the published build's own reader on its first-run file and on core's
+# mutation corpus. What the mod does to the camera is checked by an in-game pass.
+test = { cmd = "dotnet test tests/BluePrinceHeadTracking.Tests/BluePrinceHeadTracking.Tests.csproj -c Release", depends-on = ["build"] }
 
 # The two content gates over a built package, run in CI and by the release script
 # after packaging. validate-manifest reads the newest ZIP in release/ and checks

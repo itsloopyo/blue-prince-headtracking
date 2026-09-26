@@ -1,0 +1,26 @@
+# What the differential test compares, and where each file came from.
+# Columns: role, source (commit:path, a release asset, or the path in this repo), sha256 of the bytes.
+# The one published build is the rolling dev pre-release, 0.0.0-nightly.20260910.6c5513c, built
+# from 6c5513c. There is no v* release and no predecessor repo. Configuration/PluginConfig.cs, the
+# reader that build read the .cfg with, is the same file at 6c5513c and at 7bc9f61, the commit the
+# reader in src/BluePrinceHeadTracking/Legacy was frozen from, restructured to fill LegacyConfig and
+# write nothing. It uses no core code. The oracle is that file byte for byte.
+published reader	6c5513c:src/BluePrinceHeadTracking/Configuration/PluginConfig.cs	624e7f675b81a18537b4ec9b8f445b1b45e3ac26ab3291102ed143bf0ab4832a
+frozen from	7bc9f61:src/BluePrinceHeadTracking/Configuration/PluginConfig.cs	624e7f675b81a18537b4ec9b8f445b1b45e3ac26ab3291102ed143bf0ab4832a
+oracle copy	tests/config_differential/oracle/PluginConfig.cs	624e7f675b81a18537b4ec9b8f445b1b45e3ac26ab3291102ed143bf0ab4832a
+frozen reader	src/BluePrinceHeadTracking/Legacy/LegacyConfig.cs	96c66a5fab861e8c466a62eba5d761b75cd8a04f3045ee9ee5d95748705d69ed
+frozen reader	src/BluePrinceHeadTracking/Legacy/LegacyConfigReader.cs	9a242419e70255e6f18c6a6f0e572bd1ec6ee7c3424acd028b704529b04ddb6b
+frozen reader	src/BluePrinceHeadTracking/Legacy/LegacyConfigKeys.cs	4b8a59d38736be83cd3fd8b70dd21dcba0f03cf92326728654d5c6c2f2a5aeff
+BepInEx 6	vendor/bepinex/BepInEx_UnityIL2CPP_x64.zip	2a7cbf74d26abe4765c3e662db1721b923bac39849ebfef2ca5dc7de7e2d9b7f
+# BepInEx 6.0.0-be.785. The test, and the first-run harness below, ran its BepInEx/core/BepInEx.Core.dll
+# (sha256 352aacc2d5356489a00891f76db28b6463c81d25bcb02f90035171a669b7e35b), which the game loads.
+# No published build shipped the plugin .cfg, in its ZIP or as a launcher-manifest.json seed, so the
+# input is what the build writes at its first start: the .cfg its own BluePrinceHeadTracking.dll, taken
+# from the dev pre-release's installer ZIP (the ZIP's SHA-256 checked against the digest GitHub
+# reports for the asset), writes when its PluginConfig.Initialize runs on a ConfigFile at a path with
+# no file and the plugin's BepInPlugin metadata, as BasePlugin builds it. It ran on .NET 6 with that
+# BepInEx.Core.dll and the UnityEngine.CoreModule of the UnityEngine.Modules 2021.3.45 package the DLL
+# was built against. The "Acceptable values" comment lines list whichever KeyCode enum the harness
+# loaded; in game they list the one the game's interop assemblies hold. No reader reads a comment line.
+input source	release dev BluePrinceHeadTracking-dev-installer.zip f1a84392516710e07ff8d731d740aabe82790fa1f0310d911400733991852315 plugins/BluePrinceHeadTracking.dll f730f5925d4b96b08007e71fc1fb4636b99a5d7b9f728965f5bce6784ad70ac8	-
+input	tests/config_differential/data/first-run/dev.cfg	ddc0a1b61cf9ba342f9c64a949b9d12ce077c4e23126b1e735ba82f9007c0a43

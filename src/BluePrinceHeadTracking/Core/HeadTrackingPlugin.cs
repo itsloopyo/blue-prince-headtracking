@@ -6,6 +6,7 @@ using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using BluePrinceHeadTracking.Camera;
 using BluePrinceHeadTracking.Configuration;
+using BluePrinceHeadTracking.Legacy;
 using CameraUnlock.Core.Data;
 using CameraUnlock.Core.Processing;
 using CameraUnlock.Core.Protocol;
@@ -43,8 +44,7 @@ public class HeadTrackingPlugin : BasePlugin
         // the whole of Load() rather than starting part way through it.
         _logFile = LogFile.Attach(PluginName, $"{PluginName} v{PluginVersion}");
 
-        var config = new PluginConfig();
-        config.Initialize(Config);
+        ModConfig config = LoadConfig();
 
         _receiver = new OpenTrackReceiver();
         TrackingProcessor processor = BuildRotationProcessor(config);
@@ -53,10 +53,49 @@ public class HeadTrackingPlugin : BasePlugin
 
         CreateBehaviour(_receiver, processor, positionProcessor, positionInterpolator, config);
 
-        StartReceiver(_receiver, config.UdpPort.Value);
+        StartReceiver(_receiver, config.UdpPort);
 
         Logger.LogInfo($"{PluginName} v{PluginVersion} loaded - tracking is " +
-                       $"{(config.EnabledOnStartup.Value ? "ENABLED" : "DISABLED")} on startup");
+                       $"{(config.EnabledOnStartup ? "ENABLED" : "DISABLED")} on startup");
+    }
+
+    /// <summary>
+    /// Reads BepInEx/config/com.cameraunlock.blueprince.headtracking.cfg through the frozen
+    /// reader, then writes the file once, as every earlier build's Bind calls did at each start.
+    ///
+    /// <c>ConfigFile.Bind</c> truncates and rewrites the whole file each time it adds an entry it
+    /// has not seen, and it has seen none of them at startup, so the reader binds with saving on
+    /// set turned off and the single save here turns a session's twenty rewrites into one.
+    /// </summary>
+    private ModConfig LoadConfig()
+    {
+        LegacyConfig legacy = LegacyConfigReader.Read(Config, out _);
+        Config.Save();
+        Config.SaveOnConfigSet = true;
+
+        return new ModConfig
+        {
+            UdpPort = legacy.UdpPort,
+            EnabledOnStartup = legacy.EnabledOnStartup,
+            ShowReticle = legacy.ShowReticle,
+            WorldSpaceYaw = legacy.WorldSpaceYaw,
+            PauseOnLostFocus = legacy.PauseOnLostFocus,
+            DiagnosticLogging = legacy.DiagnosticLogging,
+            LocalSmoothing = legacy.LocalSmoothing,
+            RemoteSmoothing = legacy.RemoteSmoothing,
+            PositionEnabled = legacy.PositionEnabled,
+            PositionLimitX = legacy.PositionLimitX,
+            PositionLimitY = legacy.PositionLimitY,
+            PositionLimitYDown = legacy.PositionLimitYDown,
+            PositionLimitZ = legacy.PositionLimitZ,
+            PositionLimitZBack = legacy.PositionLimitZBack,
+            CollisionEnabled = legacy.CollisionEnabled,
+            CollisionRadius = legacy.CollisionRadius,
+            CollisionReleaseSmoothing = legacy.CollisionReleaseSmoothing,
+            ToggleKey = legacy.ToggleKey,
+            CycleTrackingModeKey = legacy.CycleTrackingModeKey,
+            YawModeKey = legacy.YawModeKey
+        };
     }
 
     /// <summary>
@@ -65,30 +104,30 @@ public class HeadTrackingPlugin : BasePlugin
     /// applied once at the camera boundary rather than folded in here, where they
     /// would land ahead of the limits.
     /// </summary>
-    private static TrackingProcessor BuildRotationProcessor(PluginConfig config)
+    private static TrackingProcessor BuildRotationProcessor(ModConfig config)
     {
         return new TrackingProcessor
         {
-            LocalSmoothing = config.LocalSmoothing.Value,
-            RemoteSmoothing = config.RemoteSmoothing.Value,
+            LocalSmoothing = config.LocalSmoothing,
+            RemoteSmoothing = config.RemoteSmoothing,
             Sensitivity = SensitivitySettings.Default,
             Deadzone = DeadzoneSettings.None
         };
     }
 
-    private static PositionProcessor BuildPositionProcessor(PluginConfig config)
+    private static PositionProcessor BuildPositionProcessor(ModConfig config)
     {
         return new PositionProcessor
         {
             Settings = new PositionSettings(
                 1f, 1f, 1f,
-                config.PositionLimitX.Value,
-                config.PositionLimitY.Value,
-                config.PositionLimitYDown.Value,
-                config.PositionLimitZ.Value,
-                config.PositionLimitZBack.Value,
-                localSmoothing: config.LocalSmoothing.Value,
-                remoteSmoothing: config.RemoteSmoothing.Value,
+                config.PositionLimitX,
+                config.PositionLimitY,
+                config.PositionLimitYDown,
+                config.PositionLimitZ,
+                config.PositionLimitZBack,
+                localSmoothing: config.LocalSmoothing,
+                remoteSmoothing: config.RemoteSmoothing,
                 invertX: false, invertY: false, invertZ: false)
         };
     }
@@ -100,7 +139,7 @@ public class HeadTrackingPlugin : BasePlugin
     /// cannot collect it.
     /// </summary>
     private static void CreateBehaviour(OpenTrackReceiver receiver, TrackingProcessor processor,
-        PositionProcessor positionProcessor, PositionInterpolator positionInterpolator, PluginConfig config)
+        PositionProcessor positionProcessor, PositionInterpolator positionInterpolator, ModConfig config)
     {
         ClassInjector.RegisterTypeInIl2Cpp<RenderViewInjector>();
         ClassInjector.RegisterTypeInIl2Cpp<HeadTrackingBehaviour>();

@@ -24,18 +24,16 @@ internal sealed class HotkeyHandler
 {
     private readonly HeadTrackingBehaviour _behaviour;
 
-    // Cached: each ConfigEntry<T>.Value read goes through BepInEx's boxing
-    // accessor, and these are polled every frame.
     private readonly KeyCode _toggleKey;
     private readonly KeyCode _cycleModeKey;
     private readonly KeyCode _yawModeKey;
 
-    internal HotkeyHandler(PluginConfig config, HeadTrackingBehaviour behaviour)
+    internal HotkeyHandler(ModConfig config, HeadTrackingBehaviour behaviour)
     {
         _behaviour = behaviour;
-        _toggleKey = config.ToggleKey.Value;
-        _cycleModeKey = config.CycleTrackingModeKey.Value;
-        _yawModeKey = config.YawModeKey.Value;
+        _toggleKey = config.ToggleKey;
+        _cycleModeKey = config.CycleTrackingModeKey;
+        _yawModeKey = config.YawModeKey;
     }
 
     internal void LogBindings()

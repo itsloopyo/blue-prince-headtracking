@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- The game runs the plugin on .NET 6 under BepInEx 6. xunit's runner needs .NET 8 or later,
+         and BepInEx.Core is netstandard2.0, so it loads here as it does in game. -->
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>BluePrinceHeadTracking.Tests</AssemblyName>
+    <RootNamespace>BluePrinceHeadTracking.Tests</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\cameraunlock-core\csharp\src\CameraUnlock.Core\CameraUnlock.Core.csproj" />
+  </ItemGroup>
+
+  <!-- What `pixi run setup` stages: the vendored loader's BepInEx.Core, which the game runs, with
+       the SemanticVersioning its ConfigFile.Save loads, and
+       the UnityEngine.CoreModule the plugin compiles against, for KeyCode. The legacy import runs
+       BepInEx's own ConfigFile, so the test runs the real one. -->
+  <ItemGroup>
+    <Reference Include="BepInEx.Core">
+      <HintPath>libs\BepInEx.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="SemanticVersioning">
+      <HintPath>libs\SemanticVersioning.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>..\..\src\BluePrinceHeadTracking\libs\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <!-- The mod's Unity-free config sources, compiled in rather than referenced: a reference to the
+       mod would pull the IL2CPP interop and CameraUnlock.Core.Unity into the test host. -->
+  <ItemGroup>
+    <Compile Remove="libs\**" />
+    <None Remove="libs\**" />
+    <Compile Include="..\..\src\BluePrinceHeadTracking\Legacy\*.cs" Link="Legacy\%(Filename)%(Extension)" />
+    <Compile Include="..\config_differential\**\*.cs" Link="config_differential\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\..\cameraunlock-core\csharp\testing\IniMutations.cs" Link="IniMutations.cs" />
+  </ItemGroup>
+</Project>
