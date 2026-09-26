@@ -40,10 +40,9 @@ jobs:
       - name: Setup pixi
         uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
         with:
-          # This workspace declares no conda dependencies - pixi is a task
-          # runner over dotnet and PowerShell here. Skip 'pixi install' and the
-          # action's post-install 'pixi list', which exits 1 with "No packages
-          # found in 'default' environment" on an empty environment.
+          # The action installs nothing itself: 'pixi run' below installs the
+          # locked environment (nodejs, for the config lint and the manifest
+          # gate) before it runs a task.
           run-install: false
 
       # Build + package through the SAME command a developer runs locally. Every
