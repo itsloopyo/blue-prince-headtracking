@@ -165,7 +165,7 @@ internal sealed class LeanClamp
         {
             _loggedRadiusRaise = true;
             HeadTrackingPlugin.Logger.LogWarning(
-                $"CollisionRadius {_configuredRadius:F3}m is inside the camera's near clip " +
+                $"CollisionMargin {_configuredRadius:F3}m is inside the camera's near clip " +
                 $"({nearClipPlane:F3}m) - raising it to {floor:F3}m, or a wall held at that distance " +
                 "would still not be drawn");
         }

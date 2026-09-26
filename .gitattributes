@@ -10,3 +10,6 @@
 # Differential test inputs and the oracle are compared byte for byte, line endings included.
 tests/config_differential/data/** -text
 tests/config_differential/oracle/** -text
+
+# The committed config is compared byte for byte with the table's render, CRLF included.
+config/CameraUnlock.ini -text

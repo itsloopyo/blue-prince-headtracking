@@ -4,6 +4,12 @@
 
 An unofficial head tracking mod for Blue Prince that moves the view with your head while your mouse or controller keeps control of look and interaction, driven by a webcam, phone, or any OpenTrack compatible tracker, with no VR headset required.
 
+> **Settings have moved.** This version keeps its settings in `BepInEx\config\CameraUnlock.ini`.
+> The first time it starts it reads your settings from the old
+> `BepInEx\config\com.cameraunlock.blueprince.headtracking.cfg` into the new file, and leaves the
+> old file as it was. BepInEx's ConfigurationManager no longer lists the settings: edit
+> `CameraUnlock.ini` with any text editor. [Configuration](#configuration) has the details.
+
 ## Features
 
 - **Decoupled look and aim** - head tracking moves the view, your mouse or controller keeps the aim
@@ -116,71 +122,137 @@ The third press returns to the first.
 
 **Toggle yaw mode** switches between horizon-locked yaw, where turning your head rotates the view about the world's up axis and the horizon stays level, and view-local yaw, where it rotates about the view's own up axis. Horizon-locked is the default.
 
+The tracking mode and the yaw mode you pick are saved to `CameraUnlock.ini` and are what the next start begins with. `End` turns head tracking on and off for this session only; whether it is on at the next start is the `EnableOnStartup` setting.
+
+These are the default keys. Each action reads a list of keys from `CameraUnlock.ini` (`ToggleKey`, `CycleTrackingModeKey`, `YawModeKey`), and any key in the list fires it, so you can add, rebind or remove any of them, the chords included.
+
 ## Configuration
 
-Settings live in `BepInEx/config/com.cameraunlock.blueprince.headtracking.cfg`, created on the first launch. Edit it with the game closed; the config is read at startup. Every setting is below with its default. The file itself carries more per-entry detail than this, including each setting's type and its accepted range.
+<!-- cameraunlock:config -->
+The mod reads its settings from `BepInEx\config\CameraUnlock.ini` in the game folder, and creates the file when it starts and finds none. Edit it with any text editor.
+
+A setting set to `default` takes its value from `Defaults.ini`, which every head tracking mod that keeps its settings in `CameraUnlock.ini` reads. Head tracking mods that keep their settings in another file do not read it, and neither do earlier versions of this mod. Writing a value in place of `default` changes that setting for this game only. When the mod saves a setting that a hotkey changed in game, it writes the new value in place of `default`, so that setting no longer follows `Defaults.ini` in this game until you set it to `default` again.
+
+`Defaults.ini` is `%AppData%\CameraUnlock\Defaults.ini` on Windows; `$XDG_CONFIG_HOME/CameraUnlock/Defaults.ini` on Linux, or `~/.config/CameraUnlock/Defaults.ini` where `XDG_CONFIG_HOME` is not set, under Wine and Proton too; and `~/Library/Application Support/CameraUnlock/Defaults.ini` on macOS. The mod's log, where it writes one, names the file it read.
+
+When the mod starts and finds no `Defaults.ini`, it creates one holding the built-in values, unless Windows runs the game as a packaged app, or the game runs on Linux or macOS without Wine or Proton. The mod never changes `Defaults.ini` after that. Edit it with any text editor.
+
+Earlier versions of the mod kept these settings in `com.cameraunlock.blueprince.headtracking.cfg`, in the same folder. The first time this version starts and finds no `CameraUnlock.ini`, it reads your settings from `com.cameraunlock.blueprince.headtracking.cfg` and writes them into `CameraUnlock.ini`. It never changes `com.cameraunlock.blueprince.headtracking.cfg`, and does not read it again while `CameraUnlock.ini` exists.
+
+A setting that the defaults below set to `default` is written as `default` when the value imported for it equals its default at that start, which is the value `Defaults.ini` gives it, or the built-in value where `Defaults.ini` gives none. It then follows `Defaults.ini`. Every other setting is written with the value imported for it. `RotationEnabled` and `PositionEnabled` are one setting here, the tracking mode, so both are written as `default` or neither is.
+
+Comments, and keys the mod never read, are not carried over. Nor are these, where your old file had them:
+
+- Reticle settings, and a key that toggled the reticle.
+- A sensitivity, scale, deadzone, response curve or axis inversion you changed from its default. Set these in your tracker instead.
+- The setting for a feature that earlier versions shipped switched off while it was untested. It now follows the mod's default.
+
+An older version of the mod reads `com.cameraunlock.blueprince.headtracking.cfg` and never reads `CameraUnlock.ini`, so a setting you change after updating is not in `com.cameraunlock.blueprince.headtracking.cfg`.
+
+Deleting only `CameraUnlock.ini` makes the next start read `com.cameraunlock.blueprince.headtracking.cfg` again. To go back to the defaults, replace everything in `CameraUnlock.ini` with the defaults below. Every setting they set to `default` then follows `Defaults.ini`.
+
+On Linux and macOS without Wine or Proton, this version reads its settings and saves none: it creates no `CameraUnlock.ini`, reads your settings from `com.cameraunlock.blueprince.headtracking.cfg` again at every start while there is no `CameraUnlock.ini`, and a change made in game lasts until the game closes.
+
+BepInEx's ConfigurationManager no longer lists these settings.
+
+The built-in value of each setting set to `default` below:
+
+- `UdpPort=4242`
+- `EnableOnStartup=true`
+- `WorldSpaceYaw=true`
+- `RotationEnabled=true`
+- `LocalSmoothing=0.0`
+- `RemoteSmoothing=0.15`
+- `PositionEnabled=true`
+- `PositionLimitX=0.3`
+- `PositionLimitY=0.2`
+- `PositionLimitYDown=0.2`
+- `PositionLimitZ=0.4`
+- `PositionLimitZBack=0.1`
+- `CollisionEnabled=true`
+- `CollisionReleaseSmoothing=0.9`
+- `ToggleKey=End, Ctrl+Shift+Y`
+- `CycleTrackingModeKey=PageUp, Ctrl+Shift+G`
+- `YawModeKey=PageDown, Ctrl+Shift+H`
+
+With every setting at its default, the file reads:
 
 ```ini
+; Blue Prince head tracking settings.
+; Comments start with ; and go on their own line. Text after a value is part of the value.
+; Hotkeys are key names such as End, PageUp or Ctrl+Shift+Y. Separate several with commas; leave empty for none.
+; A setting set to default takes its value from Defaults.ini, which every head tracking mod
+; that keeps its settings in CameraUnlock.ini reads: %AppData%\CameraUnlock\Defaults.ini on
+; Windows, $XDG_CONFIG_HOME/CameraUnlock/Defaults.ini (normally ~/.config/CameraUnlock) on
+; Linux, under Wine and Proton too, and ~/Library/Application Support/CameraUnlock/Defaults.ini
+; on macOS. The log names the file it read. Write a value instead of default to change that
+; setting for this game only.
+
+[CameraUnlock]
+; Written by the mod. Leave this section in place.
+ConfigFormat=1
+
 [Network]
-# UDP port the mod listens on for OpenTrack protocol packets. 4242 is the OpenTrack default.
-UdpPort = 4242
+; UDP port the mod receives tracker data on (OpenTrack protocol).
+UdpPort=default
 
 [General]
-# Enable head tracking automatically when the game starts.
-EnabledOnStartup = true
-# Move the game's pointer to your real aim point while tracking.
-# false leaves its position unchanged.
-ShowReticle = true
-# true = horizon-locked yaw, turning your head rotates the view about the world's up
-# axis. false = the view's own up axis.
-WorldSpaceYaw = true
-# Stop applying head tracking while the game window is not focused.
-PauseOnLostFocus = true
-# Write the camera rig, the aim geometry and the game-state signals to HeadTracking.log.
-# Verbose; turn it on when reporting a problem.
-DiagnosticLogging = false
+; true: head tracking is on when the game starts. ToggleKey turns it on and off.
+EnableOnStartup=default
+; true: yaw turns around the world's up axis. false: around the camera's own up axis.
+WorldSpaceYaw=default
+; true: turning your head turns the view.
+; Tracking mode at startup, with PositionEnabled. The mode hotkey changes both.
+RotationEnabled=default
+; true: head tracking stops moving the view while the game window is not focused.
+PauseOnLostFocus=true
 
 [Smoothing]
-# Smoothing for a tracker sending from this machine over loopback (127.0.0.1).
-# 0 = lightest, 1 = heaviest. Covers rotation and position.
-LocalSmoothing = 0
-# Smoothing for a tracker sending from another device on the network, such as a phone.
-# 0 = lightest, 1 = heaviest. Covers rotation and position.
-RemoteSmoothing = 0.15
+; Smoothing when the tracker runs on this PC. 0 is the least, 1 the most.
+LocalSmoothing=default
+; Smoothing when the tracker is another device on the network, such as a phone.
+; 0 is the least, 1 the most.
+RemoteSmoothing=default
 
 [Position]
-# Whether leaning moves the view.
-Enabled = true
-# Maximum sideways lean in metres, applied both ways.
-LimitX = 0.3
-# Maximum upward and downward movement in metres.
-LimitY = 0.2
-LimitYDown = 0.2
-# Maximum forward lean in metres.
-LimitZ = 0.4
-# Maximum backward lean. Deliberately tighter than LimitZ so the view cannot pull
-# back through the player.
-LimitZBack = 0.1
-
-[Collision]
-# Sweep the lean against the level so leaning into a wall cannot put the view inside it.
-CollisionEnabled = true
-# How far off a surface the view is held, in metres. Must be larger than the camera's
-# near clip distance, or the wall is still not drawn and you still see through it.
-# The mod raises it and says so in the log if it is set too small.
-CollisionRadius = 0.12
-# How gently the lean opens back up once an obstruction clears. Tightening is always
-# instant. 0.9 is about a fifth of a second.
-CollisionReleaseSmoothing = 0.9
+; true: moving your head moves the view.
+; Tracking mode at startup, with RotationEnabled. The mode hotkey changes both.
+PositionEnabled=default
+; How far, in metres, leaning left or right can move the view.
+PositionLimitX=default
+; How far, in metres, raising your head can move the view.
+PositionLimitY=default
+; How far, in metres, lowering your head can move the view.
+PositionLimitYDown=default
+; How far, in metres, leaning forward can move the view.
+PositionLimitZ=default
+; How far, in metres, leaning back can move the view.
+PositionLimitZBack=default
+; true: leaning stops at walls instead of moving the view through them.
+CollisionEnabled=default
+; How far, in metres, the view is held off a wall when you lean into it.
+; The mod holds it at least 1.25 times the camera's near clip distance.
+CollisionMargin=0.12
+; How gently the view eases back out after a wall stopped a lean.
+; 0 is the quickest, 1 the slowest.
+CollisionReleaseSmoothing=default
 
 [Hotkeys]
-# The Ctrl+Shift chords are fixed and always work alongside these.
-ToggleKey = End
-CycleTrackingModeKey = PageUp
-YawModeKey = PageDown
-```
+; Turns head tracking on and off.
+ToggleKey=default
+; Changes the tracking mode: rotation and position, rotation only, position only.
+CycleTrackingModeKey=default
+; Switches yaw between the world's up axis and the camera's own (WorldSpaceYaw).
+YawModeKey=default
 
-Field of view is the game's own setting, under `Settings` then `Controls` then `FIELD OF VIEW`. The mod reads the field of view the game is rendering on every frame, so head tracking moves the view by the same amount on screen whether or not the game has narrowed it, and the aim marker stays on target through the change.
+[Diagnostics]
+; true: write the camera rig, the aim geometry and the game-state signals to
+; HeadTracking.log. Verbose; turn it on when reporting a problem.
+DiagnosticLogging=false
+```
+<!-- /cameraunlock:config -->
+
+Field of view is the game's own setting, under `Settings` then `Controls` then `FIELD OF VIEW`. The mod reads the field of view the game is rendering on every frame, so head tracking moves the view by the same amount on screen whether or not the game has narrowed it, and the game's pointer stays on target through the change.
 
 ## Troubleshooting
 
@@ -210,7 +282,7 @@ Read `HeadTracking.log` first. It sits next to `BLUE PRINCE.exe`, is rewritten o
 
 **Pointer position while tracking**
 
-The mod moves Blue Prince's existing pointer to the world point you are aiming at, keeping the game's artwork and animation. Leaning or turning your head moves the view around that point; mouse or controller input changes your aim. Menus and paused tracking use the game's normal pointer position. Set `ShowReticle = false` to disable repositioning.
+The mod moves Blue Prince's existing pointer to the world point you are aiming at, keeping the game's artwork and animation. Leaning or turning your head moves the view around that point; mouse or controller input changes your aim. Menus and paused tracking use the game's normal pointer position. The pointer always follows your aim while head tracking moves the view; it has no setting.
 
 **The game window jumped to the middle of the screen**
 
@@ -219,7 +291,7 @@ By design. Running windowed, the mod centers the window on the work area of the 
 **Leaning still puts the view through a wall**
 
 - Check `CollisionEnabled` is `true`.
-- Raise `CollisionRadius`. It has to be larger than the camera's near clip distance or the surface is culled and you see through it anyway; the log says so if the mod had to raise it for you.
+- Raise `CollisionMargin`. It has to be larger than the camera's near clip distance or the surface is culled and you see through it anyway; the log says so if the mod had to raise it for you.
 
 ## Updating
 
@@ -227,13 +299,13 @@ Download the new release and run `install.cmd` again. Your config is preserved.
 
 ## Uninstalling
 
-Run `uninstall.cmd`. This removes the mod DLLs, and removes BepInEx too if the installer was what put it there. Use `uninstall.cmd /force` to remove BepInEx anyway.
+Run `uninstall.cmd`. This removes the mod DLLs, and removes BepInEx too if the installer was what put it there. Use `uninstall.cmd /force` to remove BepInEx anyway. Either way `BepInEx\config\CameraUnlock.ini` and `BepInEx\config\com.cameraunlock.blueprince.headtracking.cfg` are left in place, so a reinstall keeps your settings.
 
 One folder is left behind: `dotnet`, the .NET runtime BepInEx's IL2CPP build ships. It does nothing once `winhttp.dll` is gone, and you can delete it by hand.
 
 ## Building from Source
 
-Prerequisites: [pixi](https://pixi.sh) and the .NET 6 SDK. No copy of the game is needed; every build reference comes from NuGet through `scripts/setup-libs.ps1`.
+Prerequisites: [pixi](https://pixi.sh) and the .NET 8 SDK. No copy of the game is needed; every build reference comes from NuGet, and the tests' BepInEx from the vendored loader archive, through `scripts/setup-libs.ps1`.
 
 ```powershell
 git clone --recursive https://github.com/itsloopyo/blue-prince-headtracking.git
@@ -241,7 +313,7 @@ cd blue-prince-headtracking
 pixi run package
 ```
 
-`pixi run package` builds and produces the installer ZIP in `release/`. `pixi run install` deploys a Release build straight into your own game folder.
+`pixi run package` builds, runs the config tests (`pixi run test`) and produces the installer ZIP in `release/`. `pixi run install` deploys a Release build straight into your own game folder.
 
 ## Community & Support
 

@@ -1,17 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 itsloopyo
 
+using System;
+using System.Collections.Generic;
+using System.IO;
 using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using BluePrinceHeadTracking.Camera;
 using BluePrinceHeadTracking.Configuration;
-using BluePrinceHeadTracking.Legacy;
+using CameraUnlock.Core.Config;
 using CameraUnlock.Core.Data;
 using CameraUnlock.Core.Processing;
 using CameraUnlock.Core.Protocol;
 using Il2CppInterop.Runtime.Injection;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace BluePrinceHeadTracking.Core;
 
@@ -35,6 +39,7 @@ public class HeadTrackingPlugin : BasePlugin
 
     private OpenTrackReceiver? _receiver;
     private LogFile? _logFile;
+    private ConfigOwner<BluePrinceConfig>? _configOwner;
 
     public override void Load()
     {
@@ -44,58 +49,77 @@ public class HeadTrackingPlugin : BasePlugin
         // the whole of Load() rather than starting part way through it.
         _logFile = LogFile.Attach(PluginName, $"{PluginName} v{PluginVersion}");
 
-        ModConfig config = LoadConfig();
+        BluePrinceConfig config = LoadConfig();
 
         _receiver = new OpenTrackReceiver();
         TrackingProcessor processor = BuildRotationProcessor(config);
         PositionProcessor positionProcessor = BuildPositionProcessor(config);
         var positionInterpolator = new PositionInterpolator();
 
-        CreateBehaviour(_receiver, processor, positionProcessor, positionInterpolator, config);
+        CreateBehaviour(_receiver, processor, positionProcessor, positionInterpolator, config, SaveConfig);
 
         StartReceiver(_receiver, config.UdpPort);
 
         Logger.LogInfo($"{PluginName} v{PluginVersion} loaded - tracking is " +
-                       $"{(config.EnabledOnStartup ? "ENABLED" : "DISABLED")} on startup");
+                       $"{(config.EnableOnStartup ? "ENABLED" : "DISABLED")} on startup");
     }
 
     /// <summary>
-    /// Reads BepInEx/config/com.cameraunlock.blueprince.headtracking.cfg through the frozen
-    /// reader, then writes the file once, as every earlier build's Bind calls did at each start.
+    /// The settings live in BepInEx\config\CameraUnlock.ini, read and written by core's config
+    /// owner, with rows set to default following the player's Defaults.ini. Nothing is bound on
+    /// the plugin's Config, so ConfigurationManager does not list them. While CameraUnlock.ini is
+    /// absent the owner imports the plugin's .cfg, the file every earlier build read, through the
+    /// frozen reader on a ConfigFile of its own, and never writes that file.
     ///
-    /// <c>ConfigFile.Bind</c> truncates and rewrites the whole file each time it adds an entry it
-    /// has not seen, and it has seen none of them at startup, so the reader binds with saving on
-    /// set turned off and the single save here turns a session's twenty rewrites into one.
+    /// The mod has nothing on screen to show a message with, so the owner's messages for the
+    /// player go to the log beside its other lines.
     /// </summary>
-    private ModConfig LoadConfig()
+    private BluePrinceConfig LoadConfig()
     {
-        LegacyConfig legacy = LegacyConfigReader.Read(Config, out _);
-        Config.Save();
-        Config.SaveOnConfigSet = true;
+        ConfigOwnerOptions<BluePrinceConfig> options =
+            BluePrinceConfig.Options(ConfigPath, Config.ConfigFilePath, DefaultsFile.PerUser());
+        options.StatusSink = message => Logger.LogWarning(message);
+        _configOwner = new ConfigOwner<BluePrinceConfig>(options);
 
-        return new ModConfig
+        ConfigLoadResult<BluePrinceConfig> loaded = _configOwner.Load();
+
+        // The owner writes each diagnostic as "<path>: <description>" among lines that only
+        // report what it did, so the complaints are picked out by their text.
+        var complaints = new HashSet<string>();
+        foreach (CanonicalDiagnostic diagnostic in loaded.Diagnostics)
         {
-            UdpPort = legacy.UdpPort,
-            EnabledOnStartup = legacy.EnabledOnStartup,
-            ShowReticle = legacy.ShowReticle,
-            WorldSpaceYaw = legacy.WorldSpaceYaw,
-            PauseOnLostFocus = legacy.PauseOnLostFocus,
-            DiagnosticLogging = legacy.DiagnosticLogging,
-            LocalSmoothing = legacy.LocalSmoothing,
-            RemoteSmoothing = legacy.RemoteSmoothing,
-            PositionEnabled = legacy.PositionEnabled,
-            PositionLimitX = legacy.PositionLimitX,
-            PositionLimitY = legacy.PositionLimitY,
-            PositionLimitYDown = legacy.PositionLimitYDown,
-            PositionLimitZ = legacy.PositionLimitZ,
-            PositionLimitZBack = legacy.PositionLimitZBack,
-            CollisionEnabled = legacy.CollisionEnabled,
-            CollisionRadius = legacy.CollisionRadius,
-            CollisionReleaseSmoothing = legacy.CollisionReleaseSmoothing,
-            ToggleKey = legacy.ToggleKey,
-            CycleTrackingModeKey = legacy.CycleTrackingModeKey,
-            YawModeKey = legacy.YawModeKey
-        };
+            complaints.Add(ConfigPath + ": " + diagnostic.Describe());
+        }
+        bool usable = loaded.Status == ConfigLoadStatus.Canonical
+                      || loaded.Status == ConfigLoadStatus.Migrated
+                      || loaded.Status == ConfigLoadStatus.Created;
+        foreach (string line in loaded.Log)
+        {
+            if (usable && !complaints.Contains(line)) Logger.LogInfo(line);
+            else Logger.LogWarning(line);
+        }
+        Logger.LogInfo($"Config {ConfigPath}: {loaded.Status}");
+        return loaded.Config;
+    }
+
+    private static string ConfigPath => Path.Combine(Paths.ConfigPath, "CameraUnlock.ini");
+
+    /// <summary>
+    /// Called after the new value is already applied. A save that fails is logged and the
+    /// session keeps the new value.
+    /// </summary>
+    private void SaveConfig(Action<BluePrinceConfig> change)
+    {
+        ConfigSaveResult saved = _configOwner!.Save(change);
+        if (saved.Status == ConfigSaveStatus.Saved)
+        {
+            // A row that held default and now holds a value, so it stops following
+            // Defaults.ini in this game.
+            foreach (string line in saved.Log) Logger.LogInfo(line);
+            return;
+        }
+        foreach (string line in saved.Log) Logger.LogWarning(line);
+        Logger.LogWarning($"{ConfigPath}: {saved.Status}: {saved.Reason} The change applies to this session only.");
     }
 
     /// <summary>
@@ -104,7 +128,7 @@ public class HeadTrackingPlugin : BasePlugin
     /// applied once at the camera boundary rather than folded in here, where they
     /// would land ahead of the limits.
     /// </summary>
-    private static TrackingProcessor BuildRotationProcessor(ModConfig config)
+    private static TrackingProcessor BuildRotationProcessor(BluePrinceConfig config)
     {
         return new TrackingProcessor
         {
@@ -115,17 +139,17 @@ public class HeadTrackingPlugin : BasePlugin
         };
     }
 
-    private static PositionProcessor BuildPositionProcessor(ModConfig config)
+    private static PositionProcessor BuildPositionProcessor(BluePrinceConfig config)
     {
         return new PositionProcessor
         {
             Settings = new PositionSettings(
                 1f, 1f, 1f,
-                config.PositionLimitX,
-                config.PositionLimitY,
-                config.PositionLimitYDown,
-                config.PositionLimitZ,
-                config.PositionLimitZBack,
+                config.Position.LimitX,
+                config.Position.LimitY,
+                config.Position.LimitYDown,
+                config.Position.LimitZ,
+                config.Position.LimitZBack,
                 localSmoothing: config.LocalSmoothing,
                 remoteSmoothing: config.RemoteSmoothing,
                 invertX: false, invertY: false, invertZ: false)
@@ -139,7 +163,8 @@ public class HeadTrackingPlugin : BasePlugin
     /// cannot collect it.
     /// </summary>
     private static void CreateBehaviour(OpenTrackReceiver receiver, TrackingProcessor processor,
-        PositionProcessor positionProcessor, PositionInterpolator positionInterpolator, ModConfig config)
+        PositionProcessor positionProcessor, PositionInterpolator positionInterpolator, BluePrinceConfig config,
+        Action<Action<BluePrinceConfig>> saveConfig)
     {
         ClassInjector.RegisterTypeInIl2Cpp<RenderViewInjector>();
         ClassInjector.RegisterTypeInIl2Cpp<HeadTrackingBehaviour>();
@@ -149,7 +174,7 @@ public class HeadTrackingPlugin : BasePlugin
         Object.DontDestroyOnLoad(_behaviourObject);
 
         _behaviour = _behaviourObject.AddComponent<HeadTrackingBehaviour>();
-        _behaviour.Initialize(receiver, processor, positionProcessor, positionInterpolator, config);
+        _behaviour.Initialize(receiver, processor, positionProcessor, positionInterpolator, config, saveConfig);
     }
 
     private static void StartReceiver(OpenTrackReceiver receiver, int port)
