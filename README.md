@@ -4,12 +4,6 @@
 
 An unofficial head tracking mod for Blue Prince that moves the view with your head while your mouse or controller keeps control of look and interaction, driven by a webcam, phone, or any OpenTrack compatible tracker, with no VR headset required.
 
-> **Settings have moved.** This version keeps its settings in `BepInEx\config\CameraUnlock.ini`.
-> The first time it starts it reads your settings from the old
-> `BepInEx\config\com.cameraunlock.blueprince.headtracking.cfg` into the new file, and leaves the
-> old file as it was. BepInEx's ConfigurationManager no longer lists the settings: edit
-> `CameraUnlock.ini` with any text editor. [Configuration](#configuration) has the details.
-
 ## Features
 
 - **Decoupled look and aim** - head tracking moves the view, your mouse or controller keeps the aim
@@ -18,7 +12,7 @@ An unofficial head tracking mod for Blue Prince that moves the view with your he
 
 ## Requirements
 
-- [Blue Prince](https://store.steampowered.com/app/1569580/Blue_Prince/) on Windows. Built and tested against the Xbox Game Pass build, package version 1.1.11.0, installed at `C:\XboxGames\Blue Prince\Content`. The Steam and Epic builds have not been run here.
+- [Blue Prince](https://store.steampowered.com/app/1569580/Blue_Prince/) on Windows. The installer finds the Xbox Game Pass install on its own; for Steam or Epic, pass it the game folder (see [Installation](#installation)).
 - A tracking source: [OpenTrack](https://github.com/opentrack/opentrack/releases) with a webcam, a phone app, or any other tracker that sends the OpenTrack UDP protocol.
 - Windows 10 or 11, 64-bit.
 
