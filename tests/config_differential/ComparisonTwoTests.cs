@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using BluePrinceHeadTracking.Configuration;
 using BluePrinceHeadTracking.Legacy;
 using CameraUnlock.Core.Config;
 using CameraUnlock.Core.Input;
@@ -78,6 +79,9 @@ namespace BluePrinceHeadTracking.Tests.Differential
             var refused = new ConcurrentBag<string>();
             var created = new ConcurrentDictionary<string, byte[]>(StringComparer.Ordinal);
             byte[] committed = File.ReadAllBytes(ConfigTests.Committed());
+            var defaults = new BluePrinceConfig();
+            BluePrinceConfig.Table().Apply(CanonicalIni.Parse(defaultsIni == null ? new byte[0] : Encoding.ASCII.GetBytes(defaultsIni)), defaults);
+            Dictionary<string, string> defaultLines = Lines(MigrationOutcome.Describe(defaults));
             Parallel.ForEach(inputs, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, input =>
             {
                 ImportOutcome import = ImportOutcome.Run(input);
@@ -93,7 +97,7 @@ namespace BluePrinceHeadTracking.Tests.Differential
                         continue;
                     }
 
-                    string imported = MigrationOutcome.Describe(import.Config!);
+                    string imported = FollowingDefaultsIni(MigrationOutcome.Describe(import.Config!), import.Result!, defaultLines);
                     string migrated = MigrationOutcome.Describe(migration.Config!);
                     if (input.Bytes == null)
                     {
@@ -119,6 +123,12 @@ namespace BluePrinceHeadTracking.Tests.Differential
                     else
                     {
                         created[Sha256(migration.Created!)] = migration.Created!;
+                        string text = Encoding.ASCII.GetString(migration.Created!);
+                        foreach (ConceptDescriptor concept in import.Result!.FollowsDefaultsIni)
+                        {
+                            if (!text.Contains("\r\n" + concept.Key + "=default\r\n"))
+                                failures.Add(name + ": " + concept.Key + " follows Defaults.ini and is not written default");
+                        }
                     }
                     if (imported != migrated) failures.Add(name + ":\n" + Diff(imported, migrated));
                 }
@@ -132,6 +142,36 @@ namespace BluePrinceHeadTracking.Tests.Differential
             }
             Assert.Equal(ComparisonOneTests.RefusedByBepInEx(), refused.OrderBy(n => n, StringComparer.Ordinal));
             Assert.Equal(Deferred(), deferred.OrderBy(n => n, StringComparer.Ordinal));
+        }
+
+        /// <summary>
+        /// What the migration gives: the import, with every row it leaves to Defaults.ini at the
+        /// value <paramref name="defaultLines"/> holds for it.
+        /// </summary>
+        private static string FollowingDefaultsIni(string described, ImportResult result, Dictionary<string, string> defaultLines)
+        {
+            Dictionary<string, string> lines = Lines(described);
+            foreach (ConceptDescriptor concept in result.FollowsDefaultsIni)
+            {
+                foreach (string name in new[] { concept.Key, "Position." + concept.Key })
+                {
+                    if (lines.ContainsKey(name)) lines[name] = defaultLines[name];
+                }
+            }
+            var s = new StringBuilder();
+            foreach (string name in Lines(described).Keys) s.Append(name).Append('=').Append(lines[name]).Append('\n');
+            return s.ToString();
+        }
+
+        private static Dictionary<string, string> Lines(string described)
+        {
+            var lines = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (string line in described.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                int eq = line.IndexOf('=');
+                lines.Add(line.Substring(0, eq), line.Substring(eq + 1));
+            }
+            return lines;
         }
 
         /// <summary>
@@ -157,6 +197,17 @@ namespace BluePrinceHeadTracking.Tests.Differential
                 if (result.Status != status) failures.Add(input.Name + ": " + result.Status);
 
                 SortedDictionary<string, string> before = LegacyStartup.Of(old);
+                var expectedDrops = new List<string>();
+                if (!old.ShowReticle) expectedDrops.Add("Reticle General ShowReticle false");
+                Action<string, KeyCode, KeyCode> hotkey = (key, primary, letter) =>
+                {
+                    if (!IsModifier(primary)) return;
+                    before[key] = LegacyStartup.Hotkey(KeyCode.None, letter);
+                    expectedDrops.Add("ModifierKey Hotkeys " + key + " " + primary);
+                };
+                hotkey("ToggleKey", old.ToggleKey, KeyCode.Y);
+                hotkey("CycleTrackingModeKey", old.CycleTrackingModeKey, KeyCode.G);
+                hotkey("YawModeKey", old.YawModeKey, KeyCode.H);
                 SortedDictionary<string, string> after = ConvertedStartup.Of(import.Config!);
                 bool pointerDropped = result.Dropped.Any(d => d.Rule == DropRule.Reticle && d.Key == "ShowReticle");
                 foreach (string key in before.Keys)
@@ -165,11 +216,34 @@ namespace BluePrinceHeadTracking.Tests.Differential
                     if (before[key] != after[key]) failures.Add(input.Name + ": " + key + " " + before[key] + " -> " + after[key]);
                 }
 
-                var expectedDrops = new List<string>();
-                if (!old.ShowReticle) expectedDrops.Add("Reticle General ShowReticle false");
                 string[] drops = result.Dropped.Select(d => d.Rule + " " + d.Section + " " + d.Key + " " + d.Value).ToArray();
                 if (!drops.SequenceEqual(expectedDrops)) failures.Add(input.Name + ": dropped " + string.Join("; ", drops));
                 if (result.PoseShaping.Count != 0) failures.Add(input.Name + ": pose shaping " + result.PoseShaping.Count);
+
+                // A setting the player never changed from the published build's default follows
+                // Defaults.ini, the tracking mode as one unit.
+                var shipped = new LegacyConfig();
+                var expectedFollows = new List<string>();
+                Action<string, bool> follows = (key, unchanged) => { if (unchanged) expectedFollows.Add(key); };
+                follows("UdpPort", old.UdpPort == shipped.UdpPort);
+                follows("EnableOnStartup", old.EnabledOnStartup == shipped.EnabledOnStartup);
+                follows("WorldSpaceYaw", old.WorldSpaceYaw == shipped.WorldSpaceYaw);
+                follows("RotationEnabled", old.PositionEnabled == shipped.PositionEnabled);
+                follows("PositionEnabled", old.PositionEnabled == shipped.PositionEnabled);
+                follows("LocalSmoothing", old.LocalSmoothing.Equals(shipped.LocalSmoothing));
+                follows("RemoteSmoothing", old.RemoteSmoothing.Equals(shipped.RemoteSmoothing));
+                follows("PositionLimitX", old.PositionLimitX.Equals(shipped.PositionLimitX));
+                follows("PositionLimitY", old.PositionLimitY.Equals(shipped.PositionLimitY));
+                follows("PositionLimitYDown", old.PositionLimitYDown.Equals(shipped.PositionLimitYDown));
+                follows("PositionLimitZ", old.PositionLimitZ.Equals(shipped.PositionLimitZ));
+                follows("PositionLimitZBack", old.PositionLimitZBack.Equals(shipped.PositionLimitZBack));
+                follows("CollisionEnabled", old.CollisionEnabled == shipped.CollisionEnabled);
+                follows("CollisionReleaseSmoothing", old.CollisionReleaseSmoothing.Equals(shipped.CollisionReleaseSmoothing));
+                follows("ToggleKey", old.ToggleKey == shipped.ToggleKey);
+                follows("CycleTrackingModeKey", old.CycleTrackingModeKey == shipped.CycleTrackingModeKey);
+                follows("YawModeKey", old.YawModeKey == shipped.YawModeKey);
+                string[] followed = result.FollowsDefaultsIni.Select(c => c.Key).ToArray();
+                if (!followed.SequenceEqual(expectedFollows)) failures.Add(input.Name + ": follows Defaults.ini " + string.Join(", ", followed));
             });
             Assert.True(failures.IsEmpty, string.Join("\n", failures.OrderBy(f => f, StringComparer.Ordinal).Take(20)));
         }
@@ -202,14 +276,122 @@ namespace BluePrinceHeadTracking.Tests.Differential
                 codes.Add(int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture));
             }
             Assert.True(codes.Count > 300, "keys.json gave " + codes.Count + " Unity codes");
-            foreach (int code in codes.Where(c => c != 0))
+            foreach (int code in codes.Where(c => c != 0 && !IsModifier((KeyCode)c)))
             {
-                string list = LegacyConfigImport.HotkeyList((KeyCode)code, KeyCode.Y);
+                var dropped = new List<DroppedValue>();
+                string list = LegacyConfigImport.HotkeyList((KeyCode)code, KeyCode.Y, "ToggleKey", dropped);
                 Assert.True(KeyBindings.TryParse(list, out KeyBinding[] bindings, out string? error), code + ": " + list + ": " + error);
                 Assert.Equal(new KeyBinding(KeyModifiers.None, code), bindings[0]);
                 Assert.Equal(new KeyBinding(KeyModifiers.Ctrl | KeyModifiers.Shift, (int)KeyCode.Y), bindings[1]);
+                Assert.Empty(dropped);
             }
-            Assert.Equal("Ctrl+Shift+G", LegacyConfigImport.HotkeyList(KeyCode.None, KeyCode.G));
+            var none = new List<DroppedValue>();
+            Assert.Equal("Ctrl+Shift+G", LegacyConfigImport.HotkeyList(KeyCode.None, KeyCode.G, "CycleTrackingModeKey", none));
+            Assert.Empty(none);
+        }
+
+        /// <summary>
+        /// Normalisation N3: a Ctrl, Shift or Alt key on its own is left unbound, the drop is logged,
+        /// and the action keeps its Ctrl+Shift chord.
+        /// </summary>
+        [Fact]
+        public void AModifierKeyOnItsOwnImportsAsUnboundAndKeepsTheChord()
+        {
+            foreach (KeyCode modifier in Modifiers)
+            {
+                var dropped = new List<DroppedValue>();
+                Assert.Equal("Ctrl+Shift+Y", LegacyConfigImport.HotkeyList(modifier, KeyCode.Y, "ToggleKey", dropped));
+                DroppedValue drop = Assert.Single(dropped);
+                Assert.Equal(DropRule.ModifierKey, drop.Rule);
+                Assert.Equal("Hotkeys", drop.Section);
+                Assert.Equal("ToggleKey", drop.Key);
+                Assert.Equal(modifier.ToString(), drop.Value);
+            }
+
+            MigrationOutcome migration = MigrationOutcome.Run(
+                new DifferentialInput("ToggleKey = RightShift", Edited("ToggleKey = End", "ToggleKey = RightShift")), null, false);
+            Assert.Equal(ConfigLoadStatus.Migrated, migration.Status);
+            Assert.Equal("Ctrl+Shift+Y", migration.Config!.ToggleKeyName);
+            Assert.Contains("\r\nToggleKey=Ctrl+Shift+Y\r\n", Encoding.ASCII.GetString(migration.Created!));
+            Assert.Contains(migration.Log, l => l.Contains("ToggleKey=RightShift, it is a Ctrl, Shift or Alt key"));
+        }
+
+        /// <summary>
+        /// A setting the player never changed from the published build's default takes
+        /// Defaults.ini's value and is written default, whatever Defaults.ini holds. A setting the
+        /// player changed keeps its value. [Position] Enabled=true, the shipped default, leaves the
+        /// whole tracking mode to Defaults.ini.
+        /// </summary>
+        [Fact]
+        public void AnUntouchedSettingFollowsDefaultsIniAndAChangedOneStays()
+        {
+            MigrationOutcome untouched = MigrationOutcome.Run(Inputs.FirstRun(), OtherDefaults, false);
+            Assert.Equal(ConfigLoadStatus.Migrated, untouched.Status);
+            BluePrinceConfig c = untouched.Config!;
+            Assert.Equal(4343, c.UdpPort);
+            Assert.False(c.EnableOnStartup);
+            Assert.False(c.WorldSpaceYaw);
+            Assert.True(c.RotationEnabled);
+            Assert.False(c.PositionEnabled);
+            Assert.Equal(0.25f, c.LocalSmoothing);
+            Assert.Equal(0.35f, c.RemoteSmoothing);
+            Assert.Equal(0.26f, c.Position.LimitX);
+            Assert.Equal(0.16f, c.Position.LimitY);
+            Assert.Equal(0.17f, c.Position.LimitYDown);
+            Assert.Equal(0.36f, c.Position.LimitZ);
+            Assert.Equal(0.06f, c.Position.LimitZBack);
+            Assert.False(c.CollisionEnabled);
+            Assert.Equal(0.5f, c.CollisionReleaseSmoothing);
+            Assert.Equal("F8", c.ToggleKeyName);
+            Assert.Equal("F7", c.CycleTrackingModeKeyName);
+            Assert.Equal("F6", c.YawModeKeyName);
+            Assert.Equal(0.12f, c.CollisionMargin);
+            Assert.Equal(Encoding.ASCII.GetString(File.ReadAllBytes(ConfigTests.Committed())),
+                Encoding.ASCII.GetString(untouched.Created!));
+
+            byte[] legacy = Edited("ToggleKey = End", "ToggleKey = F9", "WorldSpaceYaw = true", "WorldSpaceYaw = false",
+                "\nEnabled = true", "\nEnabled = false");
+            MigrationOutcome changed = MigrationOutcome.Run(new DifferentialInput("changed", legacy), OtherDefaults, false);
+            Assert.Equal(ConfigLoadStatus.Migrated, changed.Status);
+            string text = Encoding.ASCII.GetString(changed.Created!);
+            Assert.Contains("\r\nToggleKey=F9, Ctrl+Shift+Y\r\n", text);
+            // Changed, and equal to what default gives over these defaults, so still written default.
+            Assert.Contains("\r\nWorldSpaceYaw=default\r\n", text);
+            Assert.Contains("\r\nRotationEnabled=default\r\n", text);
+            Assert.Contains("\r\nPositionEnabled=default\r\n", text);
+            Assert.Contains("\r\nUdpPort=default\r\n", text);
+            Assert.Equal("F9, Ctrl+Shift+Y", changed.Config!.ToggleKeyName);
+            Assert.Equal(4343, changed.Config.UdpPort);
+            Assert.False(changed.Config.PositionEnabled);
+
+            MigrationOutcome positionOff = MigrationOutcome.Run(
+                new DifferentialInput("position off", Edited("\nEnabled = true", "\nEnabled = false")), null, false);
+            Assert.Equal(ConfigLoadStatus.Migrated, positionOff.Status);
+            string offText = Encoding.ASCII.GetString(positionOff.Created!);
+            Assert.Contains("\r\nRotationEnabled=true\r\n", offText);
+            Assert.Contains("\r\nPositionEnabled=false\r\n", offText);
+        }
+
+        /// <summary>The published build's first-run file with each pair of texts replaced.</summary>
+        private static byte[] Edited(params string[] pairs)
+        {
+            string text = Encoding.ASCII.GetString(Inputs.FirstRun().Bytes!);
+            for (int i = 0; i < pairs.Length; i += 2)
+            {
+                Assert.Contains(pairs[i], text);
+                text = text.Replace(pairs[i], pairs[i + 1]);
+            }
+            return Encoding.ASCII.GetBytes(text);
+        }
+
+        private static readonly KeyCode[] Modifiers =
+        {
+            KeyCode.LeftControl, KeyCode.RightControl, KeyCode.LeftShift, KeyCode.RightShift, KeyCode.LeftAlt, KeyCode.RightAlt,
+        };
+
+        private static bool IsModifier(KeyCode code)
+        {
+            return Array.IndexOf(Modifiers, code) >= 0;
         }
 
         private static string Sha256(byte[] bytes)

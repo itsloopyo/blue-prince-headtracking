@@ -43,21 +43,33 @@ internal static class LegacyConfigImport
 
         LegacyConfig legacy = LegacyConfigReader.Read(legacyFile, out bool found);
         var dropped = new List<DroppedValue>();
-        Map(legacy, config, dropped);
-        return found ? ImportResult.Imported(dropped) : ImportResult.Absent(dropped);
+        var followsDefaultsIni = new LegacyFollowsDefaultsIni();
+        Map(legacy, config, dropped, followsDefaultsIni);
+        var poseShaping = new PoseShapingValue[0];
+        return found
+            ? ImportResult.Imported(dropped, poseShaping, followsDefaultsIni.Concepts)
+            : ImportResult.Absent(dropped, poseShaping, followsDefaultsIni.Concepts);
     }
 
     /// <summary>
     /// Every float the reader returns is inside its AcceptableValueRange, which BepInEx clamps NaN
     /// and infinity into, so no value reaches here that normalisation N2 would change. The
     /// published builds read no sensitivity, scale, deadzone, curve or inversion, so nothing is
-    /// passed through LegacyPoseShaping.
+    /// passed through LegacyPoseShaping. Every row is compared with the published build's own
+    /// default, a fresh <see cref="LegacyConfig"/>, so a setting the player never changed follows
+    /// Defaults.ini.
     /// </summary>
-    public static void Map(LegacyConfig legacy, BluePrinceConfig config, List<DroppedValue> dropped)
+    public static void Map(LegacyConfig legacy, BluePrinceConfig config, List<DroppedValue> dropped,
+        LegacyFollowsDefaultsIni followsDefaultsIni)
     {
+        var shipped = new LegacyConfig();
+
         config.UdpPort = legacy.UdpPort;
+        followsDefaultsIni.Setting(ConfigConcepts.UdpPort, legacy.UdpPort, shipped.UdpPort);
         config.EnableOnStartup = legacy.EnabledOnStartup;
+        followsDefaultsIni.Setting(ConfigConcepts.EnableOnStartup, legacy.EnabledOnStartup, shipped.EnabledOnStartup);
         config.WorldSpaceYaw = legacy.WorldSpaceYaw;
+        followsDefaultsIni.Setting(ConfigConcepts.WorldSpaceYaw, legacy.WorldSpaceYaw, shipped.WorldSpaceYaw);
         config.PauseOnLostFocus = legacy.PauseOnLostFocus;
         config.DiagnosticLogging = legacy.DiagnosticLogging;
 
@@ -72,9 +84,12 @@ internal static class LegacyConfigImport
         // from rotation plus that switch, and its next step turned position back on.
         config.RotationEnabled = true;
         config.PositionEnabled = legacy.PositionEnabled;
+        followsDefaultsIni.TrackingMode(legacy.PositionEnabled, shipped.PositionEnabled);
 
         config.LocalSmoothing = legacy.LocalSmoothing;
+        followsDefaultsIni.Setting(ConfigConcepts.LocalSmoothing, legacy.LocalSmoothing, shipped.LocalSmoothing);
         config.RemoteSmoothing = legacy.RemoteSmoothing;
+        followsDefaultsIni.Setting(ConfigConcepts.RemoteSmoothing, legacy.RemoteSmoothing, shipped.RemoteSmoothing);
         PositionSettings p = config.Position;
         config.Position = new PositionSettings(
             p.SensitivityX, p.SensitivityY, p.SensitivityZ,
@@ -82,34 +97,47 @@ internal static class LegacyConfigImport
             legacy.PositionLimitZBack,
             legacy.LocalSmoothing, legacy.RemoteSmoothing,
             p.InvertX, p.InvertY, p.InvertZ);
+        followsDefaultsIni.Setting(ConfigConcepts.PositionLimitX, legacy.PositionLimitX, shipped.PositionLimitX);
+        followsDefaultsIni.Setting(ConfigConcepts.PositionLimitY, legacy.PositionLimitY, shipped.PositionLimitY);
+        followsDefaultsIni.Setting(ConfigConcepts.PositionLimitYDown, legacy.PositionLimitYDown, shipped.PositionLimitYDown);
+        followsDefaultsIni.Setting(ConfigConcepts.PositionLimitZ, legacy.PositionLimitZ, shipped.PositionLimitZ);
+        followsDefaultsIni.Setting(ConfigConcepts.PositionLimitZBack, legacy.PositionLimitZBack, shipped.PositionLimitZBack);
 
         config.CollisionEnabled = legacy.CollisionEnabled;
+        followsDefaultsIni.Setting(ConfigConcepts.CollisionEnabled, legacy.CollisionEnabled, shipped.CollisionEnabled);
         config.CollisionMargin = legacy.CollisionRadius;
         config.CollisionReleaseSmoothing = legacy.CollisionReleaseSmoothing;
+        followsDefaultsIni.Setting(ConfigConcepts.CollisionReleaseSmoothing, legacy.CollisionReleaseSmoothing,
+            shipped.CollisionReleaseSmoothing);
 
-        config.ToggleKeyName = HotkeyList(legacy.ToggleKey, KeyCode.Y);
-        config.CycleTrackingModeKeyName = HotkeyList(legacy.CycleTrackingModeKey, KeyCode.G);
-        config.YawModeKeyName = HotkeyList(legacy.YawModeKey, KeyCode.H);
+        config.ToggleKeyName = HotkeyList(legacy.ToggleKey, KeyCode.Y, "ToggleKey", dropped);
+        followsDefaultsIni.Setting(ConfigConcepts.ToggleKey, legacy.ToggleKey, shipped.ToggleKey);
+        config.CycleTrackingModeKeyName = HotkeyList(legacy.CycleTrackingModeKey, KeyCode.G, "CycleTrackingModeKey", dropped);
+        followsDefaultsIni.Setting(ConfigConcepts.CycleTrackingModeKey, legacy.CycleTrackingModeKey, shipped.CycleTrackingModeKey);
+        config.YawModeKeyName = HotkeyList(legacy.YawModeKey, KeyCode.H, "YawModeKey", dropped);
+        followsDefaultsIni.Setting(ConfigConcepts.YawModeKey, legacy.YawModeKey, shipped.YawModeKey);
     }
 
     /// <summary>
     /// The keys the published build fired an action on: the configured key, unless it was None,
-    /// and the Ctrl+Shift chord its HotkeyHandler checked beside it. A key code Unity names no key
-    /// for (a number in the .cfg, which BepInEx's enum parse accepts) is written as that number,
-    /// which no hotkey list reads, so the owner defers the import and says which line.
+    /// and the Ctrl+Shift chord its HotkeyHandler checked beside it. A Ctrl, Shift or Alt key on
+    /// its own is left unbound and recorded under <paramref name="legacyKey"/> (normalisation N3),
+    /// and the chord stays. A key code Unity names no key for (a number in the .cfg, which
+    /// BepInEx's enum parse accepts) is written as that number, which no hotkey list reads, so the
+    /// owner defers the import and says which line.
     /// </summary>
-    public static string HotkeyList(KeyCode primary, KeyCode chordLetter)
+    public static string HotkeyList(KeyCode primary, KeyCode chordLetter, string legacyKey, List<DroppedValue> dropped)
     {
         string chord = KeyBindings.Format(new[] { new KeyBinding(KeyModifiers.Ctrl | KeyModifiers.Shift, (int)chordLetter) });
-        if (primary == KeyCode.None) return chord;
-        return KeyText((int)primary) + ", " + chord;
+        string key = KeyText((int)primary, legacyKey, dropped);
+        return key.Length == 0 ? chord : key + ", " + chord;
     }
 
-    private static string KeyText(int unityKeyCode)
+    private static string KeyText(int unityKeyCode, string legacyKey, List<DroppedValue> dropped)
     {
         try
         {
-            return KeyBindings.Format(new[] { new KeyBinding(KeyModifiers.None, unityKeyCode) });
+            return LegacyNormalisations.KeyCodeToBindings(unityKeyCode, "Hotkeys", legacyKey, dropped);
         }
         catch (ArgumentException)
         {
