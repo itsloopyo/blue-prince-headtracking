@@ -103,6 +103,13 @@ try {
 
 $tagName = "v$Version"
 
+try {
+    Assert-ReleaseNotBelowCanonicalSince -RepoRoot $projectDir -Version $Version
+} catch {
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}
+
 # Releases are semver-only; a prerelease suffix would produce a tag the
 # release workflow and the launcher manifest cannot both agree on.
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {
