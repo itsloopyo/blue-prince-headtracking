@@ -22,7 +22,7 @@ and copyright line below is the one that component's own binary declares.
 |-----------|---------|---------|--------------|
 | BepInEx | 6.0.0-be.785 | LGPL-2.1 | Bundled verbatim in the installer ZIP |
 | UnityDoorstop | 4.5.0 | LGPL-2.1 | Bundled inside the BepInEx distribution in the installer ZIP, as `winhttp.dll` |
-| cameraunlock-core | b4df73a5d8076968fcbf7e4088dd49db11a2684e | MIT | Shipped as `CameraUnlock.Core.dll` and `CameraUnlock.Core.Unity.dll` |
+| cameraunlock-core | 4a5e7f4d1c37efb9074f7f3651cde8327b64715a | MIT | Shipped as `CameraUnlock.Core.dll` and `CameraUnlock.Core.Unity.dll` |
 | HarmonyX / Lib.Harmony | ships with BepInEx 6 IL2CPP | MIT | Bundled inside the BepInEx distribution in the installer ZIP |
 | Il2CppInterop | 1.5.3 | LGPL-3.0 | Bundled inside the BepInEx distribution in the installer ZIP |
 | Iced | 1.21.0 | MIT | Bundled inside the BepInEx distribution in the installer ZIP |
@@ -572,7 +572,7 @@ Git submodule at `cameraunlock-core/`, built into `CameraUnlock.Core.dll` and
 MIT licensed under the same copyright holder as this repository, so the root
 `LICENSE` covers it. Reproduced here so the notices are complete.
 
-- **Version:** commit `b4df73a5d8076968fcbf7e4088dd49db11a2684e`
+- **Version:** commit `4a5e7f4d1c37efb9074f7f3651cde8327b64715a`
 - **License:** MIT
 - **Upstream:** https://github.com/itsloopyo/cameraunlock-core
 - **Usage:** Shared tracking pipeline: UDP receiver, pose interpolation, smoothing and view-matrix maths.
