@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using BepInEx.Configuration;
 using BluePrinceHeadTracking.Configuration;
@@ -123,25 +122,13 @@ internal static class LegacyConfigImport
     /// and the Ctrl+Shift chord its HotkeyHandler checked beside it. A Ctrl, Shift or Alt key on
     /// its own is left unbound and recorded under <paramref name="legacyKey"/> (normalisation N3),
     /// and the chord stays. A key code Unity names no key for (a number in the .cfg, which
-    /// BepInEx's enum parse accepts) is written as that number, which no hotkey list reads, so the
-    /// owner defers the import and says which line.
+    /// BepInEx's enum parse accepts) is left unbound the same way, recorded as KeyCodeOutOfRange
+    /// (normalisation N1).
     /// </summary>
     public static string HotkeyList(KeyCode primary, KeyCode chordLetter, string legacyKey, List<DroppedValue> dropped)
     {
         string chord = KeyBindings.Format(new[] { new KeyBinding(KeyModifiers.Ctrl | KeyModifiers.Shift, (int)chordLetter) });
-        string key = KeyText((int)primary, legacyKey, dropped);
+        string key = LegacyNormalisations.KeyCodeToBindings((int)primary, "Hotkeys", legacyKey, dropped);
         return key.Length == 0 ? chord : key + ", " + chord;
-    }
-
-    private static string KeyText(int unityKeyCode, string legacyKey, List<DroppedValue> dropped)
-    {
-        try
-        {
-            return LegacyNormalisations.KeyCodeToBindings(unityKeyCode, "Hotkeys", legacyKey, dropped);
-        }
-        catch (ArgumentException)
-        {
-            return unityKeyCode.ToString(CultureInfo.InvariantCulture);
-        }
     }
 }
