@@ -12,12 +12,15 @@ restore = "dotnet restore src/BluePrinceHeadTracking/BluePrinceHeadTracking.cspr
 setup = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/setup-libs.ps1", depends-on = ["restore"] }
 build = { cmd = "dotnet build src/BluePrinceHeadTracking/BluePrinceHeadTracking.csproj -c Release -m:1", depends-on = ["setup"] }
 install = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 Release", depends-on = ["build"] }
-package = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["test"] }
+package = { cmd = "powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1", depends-on = ["test-unit"] }
 # The config tests, among them the differential test in tests/config_differential, which holds
 # the legacy import to the published build's own reader on its first-run file and on core's
 # mutation corpus, then core's canonical config lint over the committed file and every file the
 # test migrated. What the mod does to the camera is checked by an in-game pass.
-test = { cmd = "dotnet test tests/BluePrinceHeadTracking.Tests/BluePrinceHeadTracking.Tests.csproj -c Release && node tests/config_differential/lint-migrated.mjs tests/BluePrinceHeadTracking.Tests/bin/Release/net8.0/migrated", depends-on = ["build"] }
+# test-unit is every test but the differential; test-differential is the differential and the lint.
+test-unit = { cmd = "dotnet test tests/BluePrinceHeadTracking.Tests/BluePrinceHeadTracking.Tests.csproj -c Release --filter FullyQualifiedName!~Differential", depends-on = ["build"] }
+test-differential = { cmd = "dotnet test tests/BluePrinceHeadTracking.Tests/BluePrinceHeadTracking.Tests.csproj -c Release --filter FullyQualifiedName~Differential && node tests/config_differential/lint-migrated.mjs tests/BluePrinceHeadTracking.Tests/bin/Release/net8.0/migrated", depends-on = ["build"] }
+test = { depends-on = ["test-unit", "test-differential"] }
 # Rewrites config/CameraUnlock.ini from the config table after a change to a row, a comment or a
 # default. The render test compares the two on every `pixi run test`, so the committed file cannot
 # drift from the code.
