@@ -5,6 +5,7 @@ using System.Text;
 using BluePrinceHeadTracking.Camera;
 using BluePrinceHeadTracking.Core;
 using BluePrinceHeadTracking.Utilities;
+using CameraUnlock.Core.Processing;
 using UnityEngine;
 
 namespace BluePrinceHeadTracking.Diagnostics;
@@ -115,7 +116,7 @@ internal static class RigProbe
     /// The periodic line. Every term a reticle or axis fault can live in, on one
     /// line, for one frame.
     /// </summary>
-    internal static void Sample(AimReticle reticle, LeanClamp leanClamp, bool collisionEnabled,
+    internal static void Sample(AimReticle reticle, LeanClamp leanClamp, LeanTrace leanTrace, bool collisionEnabled,
         UnityEngine.Camera camera, GameFieldOfView fieldOfView, Vector3 leanWorld,
         (float Yaw, float Pitch, float Roll) applied)
     {
@@ -140,7 +141,7 @@ internal static class RigProbe
             $"offset=({reticle.LastOffset.x:F1},{reticle.LastOffset.y:F1})px " +
             $"{reticle.Describe()} markerApplied={reticle.LastApplied} " +
             $"clamp(enabled={collisionEnabled} contact={leanClamp.InContact} " +
-            $"allow={leanClamp.Allowance:F3}) " +
+            $"standoff={leanTrace.Standoff:F3}m) " +
             $"screen={TrackedView.ActivePixelWidth}x{TrackedView.ActivePixelHeight} " +
             AimProbe.Describe());
     }

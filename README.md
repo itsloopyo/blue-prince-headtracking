@@ -125,7 +125,7 @@ These are the default keys. Each action reads a list of keys from `CameraUnlock.
 <!-- cameraunlock:config -->
 The mod reads its settings from `BepInEx\config\CameraUnlock.ini` in the game folder, and creates the file when it starts and finds none. Edit it with any text editor.
 
-A setting set to `default` takes its value from `Defaults.ini`, which every head tracking mod that keeps its settings in `CameraUnlock.ini` reads. Head tracking mods that keep their settings in another file do not read it. Writing a value in place of `default` changes that setting for this game only. When the mod saves a setting that a hotkey changed in game, it writes the new value in place of `default`, so that setting no longer follows `Defaults.ini` in this game until you set it to `default` again.
+A setting set to `default` takes its value from `Defaults.ini`, which every head tracking mod that keeps its settings in `CameraUnlock.ini` reads. Head tracking mods that keep their settings in another file do not read it. Changing a setting in `Defaults.ini` changes it in every game that has it set to `default`. Writing a value in place of `default` changes that setting for this game only. When the mod saves a setting that a hotkey changed in game, it writes the new value in place of `default`, so that setting no longer follows `Defaults.ini` in this game until you set it to `default` again.
 
 `Defaults.ini` is `%AppData%\CameraUnlock\Defaults.ini` on Windows; `$XDG_CONFIG_HOME/CameraUnlock/Defaults.ini` on Linux, or `~/.config/CameraUnlock/Defaults.ini` where `XDG_CONFIG_HOME` is not set, under Wine and Proton too; and `~/Library/Application Support/CameraUnlock/Defaults.ini` on macOS. The mod's log, where it writes one, names the file it read.
 
@@ -165,8 +165,9 @@ With every setting at its default, the file reads:
 ; that keeps its settings in CameraUnlock.ini reads: %AppData%\CameraUnlock\Defaults.ini on
 ; Windows, $XDG_CONFIG_HOME/CameraUnlock/Defaults.ini (normally ~/.config/CameraUnlock) on
 ; Linux, under Wine and Proton too, and ~/Library/Application Support/CameraUnlock/Defaults.ini
-; on macOS. The log names the file it read. Write a value instead of default to change that
-; setting for this game only.
+; on macOS. The log names the file it read. Change a setting in Defaults.ini to change it in
+; every game that has it set to default, or write a value here instead of default to change it
+; for this game only.
 
 [CameraUnlock]
 ; Written by the mod. Leave this section in place.
@@ -209,9 +210,10 @@ PositionLimitZ=default
 ; How far, in metres, leaning back can move the view.
 PositionLimitZBack=default
 ; true: leaning stops at walls instead of moving the view through them.
+; Only games whose mod sweeps the level for walls read this; the rest ignore it.
 CollisionEnabled=default
 ; How far, in metres, the view is held off a wall when you lean into it.
-; The mod holds it at least 1.25 times the camera's near clip distance.
+; The mod raises it where the corners of the camera's near clip plane need more room.
 CollisionMargin=0.12
 ; How gently the view eases back out after a wall stopped a lean.
 ; 0 is the quickest, 1 the slowest.

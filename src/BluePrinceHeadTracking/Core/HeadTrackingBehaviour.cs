@@ -9,6 +9,7 @@ using BluePrinceHeadTracking.Input;
 using BluePrinceHeadTracking.State;
 using CameraUnlock.Core.Data;
 using CameraUnlock.Core.Math;
+using CameraUnlock.Core.Processing;
 using CameraUnlock.Core.Protocol;
 using CameraUnlock.Core.Tracking;
 using UnityEngine;
@@ -51,6 +52,9 @@ public class HeadTrackingBehaviour : MonoBehaviour
     private HotkeyHandler? _hotkeyHandler;
     private GameplayStateDetector? _stateDetector;
     private LeanClamp? _leanClamp;
+    private LeanTrace? _leanTrace;
+    private float _collisionReleaseSmoothing;
+    private bool _leanInContact;
     private RenderViewInjector? _injector;
     private Action<Action<BluePrinceConfig>>? _saveConfig;
 
@@ -85,10 +89,9 @@ public class HeadTrackingBehaviour : MonoBehaviour
         _pauseOnLostFocus = config.PauseOnLostFocus;
         _collisionEnabled = config.CollisionEnabled;
 
-        _leanClamp = new LeanClamp(
-            config.CollisionMargin,
-            Physics.DefaultRaycastLayers,
-            config.CollisionReleaseSmoothing);
+        _leanClamp = new LeanClamp();
+        _leanTrace = new LeanTrace(config.CollisionMargin, Physics.DefaultRaycastLayers);
+        _collisionReleaseSmoothing = config.CollisionReleaseSmoothing;
 
         _cameraFinder = new CameraFinder();
         _cameraFinder.OnCameraChanged += OnCameraChanged;
@@ -310,7 +313,7 @@ public class HeadTrackingBehaviour : MonoBehaviour
         RigProbe.DumpRig(cameraTransform, camera);
         // The clamp reports an unrestricted allowance both when the room is open and
         // when the sweep is switched off, so the line has to say which.
-        RigProbe.Sample(_reticle, _leanClamp!, _collisionEnabled, camera, _fieldOfView, wantedLean,
+        RigProbe.Sample(_reticle, _leanClamp!, _leanTrace!, _collisionEnabled, camera, _fieldOfView, wantedLean,
             (yaw, pitch, roll));
         return true;
     }
@@ -434,20 +437,44 @@ public class HeadTrackingBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// Trims the lean to what the room leaves free. The standoff has to exceed the
-    /// camera's near clip distance or the surface is culled and the player sees
-    /// through it anyway, so the near plane is read from the camera rather than
-    /// assumed.
+    /// Trims the lean to what the room leaves free, sweeping from the clean eye before
+    /// the offset is applied. The standoff is set from the camera every frame, because a
+    /// wall inside the near clip plane is culled and the player sees through it anyway.
     /// </summary>
     private Vector3 ClampLean(Vector3 cleanPosition, Vector3 wantedLean, UnityEngine.Camera camera, float dt)
     {
-        if (!_collisionEnabled || wantedLean == Vector3.zero)
+        LeanClamp clamp = _leanClamp!;
+        if (!_collisionEnabled)
         {
-            _leanClamp!.Reset();
+            clamp.Reset();
             return wantedLean;
         }
 
-        return _leanClamp!.Clamp(cleanPosition, wantedLean, dt, camera.nearClipPlane);
+        // The trace carries the standoff as its sphere's radius and hands it back on every
+        // distance, and the clamp takes it off again as its skin, so the two are one number.
+        clamp.Settings = new LeanClampSettings
+        {
+            Skin = _leanTrace!.UpdateStandoff(camera),
+            ReleaseSmoothing = _collisionReleaseSmoothing
+        };
+
+        Vec3 clamped = clamp.Apply(
+            new Vec3(cleanPosition.x, cleanPosition.y, cleanPosition.z),
+            new Vec3(wantedLean.x, wantedLean.y, wantedLean.z),
+            dt, _leanTrace.Query);
+
+        if (clamp.InContact != _leanInContact)
+        {
+            _leanInContact = clamp.InContact;
+            if (RigProbe.Enabled)
+            {
+                HeadTrackingPlugin.Logger.LogInfo(
+                    $"LEANCLAMP contact={_leanInContact} wanted={wantedLean.magnitude:F3}m " +
+                    $"allowed={clamped.Magnitude:F3}m standoff={_leanTrace.Standoff:F3}m");
+            }
+        }
+
+        return new Vector3(clamped.X, clamped.Y, clamped.Z);
     }
 
     private bool ShouldApplyHeadTracking()

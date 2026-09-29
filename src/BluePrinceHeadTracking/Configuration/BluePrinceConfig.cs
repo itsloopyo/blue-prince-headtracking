@@ -56,7 +56,7 @@ internal sealed class BluePrinceConfig : HeadTrackingConfigData
             .Select(ConfigConcepts.PositionEnabled).Writable()
             .Select(ConfigConcepts.CollisionMargin)
             .Comment("How far, in metres, the view is held off a wall when you lean into it.\n" +
-                     "The mod holds it at least 1.25 times the camera's near clip distance.")
+                     "The mod raises it where the corners of the camera's near clip plane need more room.")
             .Local("General", "PauseOnLostFocus", c => c.PauseOnLostFocus, (c, v) => c.PauseOnLostFocus = v,
                 new BoolCodec(),
                 "true: head tracking stops moving the view while the game window is not focused.")
