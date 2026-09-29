@@ -171,12 +171,21 @@ internal sealed class CameraFinder : IDisposable
         {
             if (entry is not UnityEngine.Camera camera || camera == null) continue;
 
+            if (dump == null)
+            {
+                // Every gameplay entry re-runs this search, and in this game that is
+                // every note, map and menu close, so without a dump to write it stops
+                // at the first match and builds no strings.
+                if (HasController(camera.transform)) return camera;
+                continue;
+            }
+
             string rig = DescribeRig(camera.transform, out bool hasController);
             if (hasController && player == null) player = camera;
 
-            dump?.Append($"\n  {TransformPath.GetFullPath(camera.transform)} " +
-                         $"tag={camera.tag} depth={camera.depth} enabled={camera.isActiveAndEnabled} " +
-                         $"controller={hasController} rig=[{rig}]");
+            dump.Append($"\n  {TransformPath.GetFullPath(camera.transform)} " +
+                        $"tag={camera.tag} depth={camera.depth} enabled={camera.isActiveAndEnabled} " +
+                        $"controller={hasController} rig=[{rig}]");
         }
 
         if (dump != null)
@@ -186,6 +195,25 @@ internal sealed class CameraFinder : IDisposable
         }
 
         return player;
+    }
+
+    private static bool HasController(Transform cameraTransform)
+    {
+        Transform? node = cameraTransform;
+        for (int depth = 0; node != null && depth < RigSearchDepth; depth++)
+        {
+            foreach (object component in GameMembers.ComponentsOn(node.gameObject))
+            {
+                if (component != null && IsController(component)) return true;
+            }
+            node = node.parent;
+        }
+        return false;
+    }
+
+    private static bool IsController(object component)
+    {
+        return GameMembers.Il2CppTypeName(component).EndsWith(ControllerTypeSuffix, StringComparison.Ordinal);
     }
 
     /// <summary>

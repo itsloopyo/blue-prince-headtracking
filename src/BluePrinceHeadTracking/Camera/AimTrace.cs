@@ -3,6 +3,7 @@
 
 using System;
 using BluePrinceHeadTracking.Core;
+using BluePrinceHeadTracking.Diagnostics;
 using BluePrinceHeadTracking.Utilities;
 using UnityEngine;
 
@@ -75,7 +76,10 @@ internal sealed class AimTrace
             return AimTraceResult.NoHit;
         }
 
-        return AimTraceResult.Hit(distance, hit.collider != null ? hit.collider.gameObject.layer : -1);
+        // The layer only feeds the diagnostic line, and reading it wraps two IL2CPP
+        // objects every frame.
+        int layer = RigProbe.Enabled && hit.collider != null ? hit.collider.gameObject.layer : -1;
+        return AimTraceResult.Hit(distance, layer);
     }
 
     /// <summary>

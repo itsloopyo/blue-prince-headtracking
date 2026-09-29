@@ -34,9 +34,10 @@ namespace BluePrinceHeadTracking.Camera;
 /// </summary>
 internal sealed class GameFieldOfView
 {
-    // The settings singleton does not exist on the very first frames, and neither
-    // does it after a teardown, so the search is retried on an interval.
-    private const int SearchRetryFrames = 60;
+    // The setting only changes on the settings screen, where tracking is suppressed,
+    // and it is read again on every gameplay entry, so between those it is refreshed
+    // on an interval rather than through four reflected calls every frame.
+    private const int SettingsReadIntervalFrames = 30;
 
     // The player camera's vertical field of view before the setting's offset is
     // added. Measured on the shipped build: the camera renders 68.000 at the
@@ -52,7 +53,10 @@ internal sealed class GameFieldOfView
     private MethodInfo? _playerGetter;
     private FieldInfo? _fieldOfViewField;
     private Type? _settingsMasterType;
-    private int _framesUntilRetry;
+    private bool _resolved;
+    private bool _resolvable;
+    private int _framesUntilSettingsRead;
+    private float _settingsOffset = -1f;
     private bool _loggedMissingSettings;
     private int _loggedBasisForCamera;
 
@@ -88,7 +92,13 @@ internal sealed class GameFieldOfView
         float tanHalfLive = 1f / m11;
         LiveVerticalFov = Mathf.Atan(tanHalfLive) * 2f * Mathf.Rad2Deg;
 
-        float offset = ReadSettingsFieldOfViewOffset();
+        if (--_framesUntilSettingsRead <= 0)
+        {
+            _framesUntilSettingsRead = SettingsReadIntervalFrames;
+            _settingsOffset = ReadSettingsFieldOfViewOffset();
+        }
+
+        float offset = _settingsOffset;
         if (offset < 0f)
         {
             BaseVerticalFov = -1f;
@@ -154,14 +164,17 @@ internal sealed class GameFieldOfView
         return (float)_fieldOfViewField!.GetValue(player)!;
     }
 
+    /// <summary>
+    /// Resolves the accessors once. The interop assemblies are all loaded before the
+    /// plugin is, so a type or member missing on the first attempt is missing for the
+    /// session, and searching every assembly for it again would only cost frames.
+    /// </summary>
     private bool Resolve()
     {
-        if (_fieldOfViewField != null) return true;
+        if (_resolved) return _resolvable;
+        _resolved = true;
 
-        if (--_framesUntilRetry > 0) return false;
-        _framesUntilRetry = SearchRetryFrames;
-
-        _settingsMasterType ??= AccessTools.TypeByName("BluePrince.Settings.SettingsMaster");
+        _settingsMasterType = AccessTools.TypeByName("BluePrince.Settings.SettingsMaster");
         if (_settingsMasterType == null)
         {
             LogMissingSettings("BluePrince.Settings.SettingsMaster was not found");
@@ -190,6 +203,7 @@ internal sealed class GameFieldOfView
             return false;
         }
 
+        _resolvable = true;
         return true;
     }
 
@@ -208,15 +222,14 @@ internal sealed class GameFieldOfView
     }
 
     /// <summary>
-    /// Re-arms the retry counter so a scene that has not resolved the setting yet
-    /// tries again on the next frame rather than waiting out the interval. Accessors
-    /// that did resolve are kept: they are MethodInfo and FieldInfo on types that do
-    /// not change between scenes. The basis latch is kept too, so re-entering
+    /// Reads the setting again on the next frame rather than waiting out the
+    /// interval, so a change made on the settings screen is in the base from the
+    /// first frame of gameplay after it. The basis latch is kept, so re-entering
     /// gameplay on the same camera does not rewrite the same line - which happens on
     /// every menu and note close in this game.
     /// </summary>
     internal void Reset()
     {
-        _framesUntilRetry = 0;
+        _framesUntilSettingsRead = 0;
     }
 }

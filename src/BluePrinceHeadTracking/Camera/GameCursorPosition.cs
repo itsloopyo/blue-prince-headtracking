@@ -46,25 +46,33 @@ internal sealed class GameCursorPosition : IDisposable
             return;
         }
 
-        IntPtr position = IntPtr.Add(instance, _mousePositionOffset);
-        Vector3 saved = Marshal.PtrToStructure<Vector3>(position);
+        // Only x and y are replaced, as raw 32-bit words: Marshal's structure copies
+        // box a Vector3 each way, and this runs for every cursor vertex of every frame.
+        IntPtr x = IntPtr.Add(instance, _mousePositionOffset);
+        IntPtr y = IntPtr.Add(x, sizeof(float));
+        int savedX = Marshal.ReadInt32(x);
+        int savedY = Marshal.ReadInt32(y);
+        Vector2 draw = ScreenPoint;
         // The game reads this anchor while submitting each cursor vertex. Restore
         // it before returning so input and subsequent cursor draws see its own value.
-        Marshal.StructureToPtr(new Vector3(ScreenPoint.x, ScreenPoint.y, saved.z), position, false);
+        Marshal.WriteInt32(x, BitConverter.SingleToInt32Bits(draw.x));
+        Marshal.WriteInt32(y, BitConverter.SingleToInt32Bits(draw.y));
         try
         {
             _original(instance, index, methodInfo);
         }
         finally
         {
-            Marshal.StructureToPtr(saved, position, false);
+            Marshal.WriteInt32(x, savedX);
+            Marshal.WriteInt32(y, savedY);
         }
 
         if (Diagnostics.RigProbe.Enabled && Time.unscaledTime >= _nextLogTime)
         {
             _nextLogTime = Time.unscaledTime + 2f;
             HeadTrackingPlugin.Logger.LogInfo(
-                $"CURSOR original=({saved.x:F1},{saved.y:F1}) draw=({ScreenPoint.x:F1},{ScreenPoint.y:F1}) restored=True");
+                $"CURSOR original=({BitConverter.Int32BitsToSingle(savedX):F1},{BitConverter.Int32BitsToSingle(savedY):F1}) " +
+                $"draw=({draw.x:F1},{draw.y:F1}) restored=True");
         }
     }
 
