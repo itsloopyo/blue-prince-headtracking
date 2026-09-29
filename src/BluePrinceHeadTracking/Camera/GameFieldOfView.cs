@@ -5,6 +5,7 @@ using System;
 using System.Reflection;
 using BluePrinceHeadTracking.Core;
 using BluePrinceHeadTracking.Utilities;
+using CameraUnlock.Core.Processing;
 using HarmonyLib;
 using UnityEngine;
 
@@ -108,7 +109,7 @@ internal sealed class GameFieldOfView
 
         BaseVerticalFov = UnzoomedVerticalFov + offset;
         float tanHalfBase = Mathf.Tan(BaseVerticalFov * 0.5f * Mathf.Deg2Rad);
-        Factor = ZoomCompensation.Factor(tanHalfLive, tanHalfBase);
+        Factor = ZoomCompensation.FovZoomFactor(tanHalfLive, tanHalfBase);
 
         if (inGameplay)
         {

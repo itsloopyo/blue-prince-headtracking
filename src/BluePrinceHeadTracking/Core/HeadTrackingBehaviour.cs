@@ -36,11 +36,16 @@ public class HeadTrackingBehaviour : MonoBehaviour
 {
     // Applied after the core pipeline, so an extreme head pose cannot swing the
     // view somewhere the player cannot recover from. Yaw has no limit of its own:
-    // the tangent round trip in ZoomCompensation.ScaleAngle already holds it inside
-    // the pole, and every value it can return is under any yaw ceiling worth
-    // setting, so a clamp here would never bind.
+    // MaxZoomScaledAngle already holds it inside the pole, and every value the zoom
+    // scaling can return is under any yaw ceiling worth setting.
     private const float MaxPitch = 70f;
     private const float MaxRoll = 45f;
+
+    // The zoom scaling is a tangent round trip, single valued only on (-90, 90): past the
+    // pole 100 degrees comes back as -80 and the view swings hard the other way. The mod
+    // keeps no centre of its own, so a tracker not yet centred in its own app sends
+    // absolute angles that reach there, and they are held just inside it first.
+    private const float MaxZoomScaledAngle = 89.9f;
 
     // Below this the clean view has no heading left in its forward axis, which
     // happens only when the player is looking straight up or straight down.
@@ -357,9 +362,15 @@ public class HeadTrackingBehaviour : MonoBehaviour
     {
         float zoom = _fieldOfView.Factor;
         return (
-            ZoomCompensation.ScaleAngle(processed.Yaw, zoom),
-            Mathf.Clamp(-ZoomCompensation.ScaleAngle(processed.Pitch, zoom), -MaxPitch, MaxPitch),
+            ScaleForZoom(processed.Yaw, zoom),
+            Mathf.Clamp(-ScaleForZoom(processed.Pitch, zoom), -MaxPitch, MaxPitch),
             Mathf.Clamp(processed.Roll, -MaxRoll, MaxRoll));
+    }
+
+    private static float ScaleForZoom(float angle, float zoom)
+    {
+        return ZoomCompensation.ScaleAngleForZoom(
+            Mathf.Clamp(angle, -MaxZoomScaledAngle, MaxZoomScaledAngle), zoom);
     }
 
     /// <summary>

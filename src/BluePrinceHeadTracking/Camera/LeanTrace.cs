@@ -13,17 +13,18 @@ namespace BluePrinceHeadTracking.Camera;
 /// eye and where the lean wants to put it. Core's <see cref="LeanClamp"/> owns what is
 /// done with the answer.
 ///
-/// Two casts, because each misses something the other catches:
+/// Two queries, because each misses something the other catches, and the nearer answer
+/// wins:
 /// <list type="bullet">
 /// <item>A sphere of the standoff's radius swept along the lean. It is the shape the eye
-/// actually needs kept clear, so it catches a door frame's edge or a shelf's lip the eye
-/// would pass beside, and it cannot thread a gap narrower than itself. Unity leaves out
-/// every collider the sphere already overlaps where it starts, which is what keeps the
+/// actually needs kept clear and it cannot thread a gap narrower than itself. Unity leaves
+/// out every collider the sphere already overlaps where it starts, which is what keeps the
 /// player's own capsule from blocking every lean, and also what hides a surface that is
 /// already within the standoff of the eye.</item>
-/// <item>A line down the centre of the lean. It sees that surface, because a ray only
-/// skips a collider its origin is inside, and for a flat surface met at an angle it
-/// gives the exact travel that holds the eye the standoff off it.</item>
+/// <item>Core's <see cref="LineSweep"/> over <c>Physics.Raycast</c>: a ray down the centre
+/// of the lean and a ring of rays around it, each behind a sideways probe. A ray only skips
+/// a collider its origin is inside, so these see that surface, on the centre line or beside
+/// it, and still pass through the player's capsule.</item>
 /// </list>
 ///
 /// Distances come back in core's convention: the travel the eye may make, plus the
@@ -31,13 +32,6 @@ namespace BluePrinceHeadTracking.Camera;
 /// </summary>
 internal sealed class LeanTrace
 {
-    // The floor on the cosine between the lean and a surface's normal. Holding the eye r
-    // off a flat surface met at an angle means stopping r / cos short of it along the lean,
-    // which is unbounded at grazing incidence. 0.25 is 75 degrees off the normal, past which
-    // the eye slides along the surface rather than into it; the same floor as core's line
-    // sweep.
-    private const float MinApproachCosine = 0.25f;
-
     // How far past the corners of the near clip plane the standoff must reach at the least.
     // A turned head can put a corner of the near plane, not its centre, nearest the wall,
     // and geometry inside the near plane is culled.
@@ -45,12 +39,14 @@ internal sealed class LeanTrace
 
     private readonly float _configuredStandoff;
     private readonly int _mask;
+    private readonly LineSweep _lineSweep;
     private bool _loggedStandoffRaise;
 
     internal LeanTrace(float standoff, int mask)
     {
         _configuredStandoff = standoff;
         _mask = mask;
+        _lineSweep = new LineSweep(Cast);
         Query = Trace;
     }
 
@@ -75,11 +71,12 @@ internal sealed class LeanTrace
         float corner = camera.nearClipPlane * Mathf.Sqrt(1f + tanH * tanH + tanV * tanV);
         float floor = corner * NearPlaneStandoffFactor;
 
-        if (_configuredStandoff >= floor)
-        {
-            Standoff = _configuredStandoff;
-            return Standoff;
-        }
+        Standoff = _configuredStandoff >= floor ? _configuredStandoff : floor;
+        LineSweepSettings sweep = LineSweepSettings.Default;
+        sweep.Radius = Standoff;
+        _lineSweep.Settings = sweep;
+
+        if (_configuredStandoff >= floor) return Standoff;
 
         if (!_loggedStandoffRaise)
         {
@@ -89,7 +86,6 @@ internal sealed class LeanTrace
                 $"camera's near clip plane ({corner:F3}m from the eye at near={camera.nearClipPlane:F3}m) " +
                 $"be culled - holding walls {floor:F3}m off instead");
         }
-        Standoff = floor;
         return Standoff;
     }
 
@@ -110,16 +106,26 @@ internal sealed class LeanTrace
             travel = Mathf.Min(travel, sphere.distance);
         }
 
-        // Overreaches the lean by the standoff at the steepest angle allowed, or the ray stops
-        // where the lean stops and cannot see the surface the eye is about to rest against.
-        if (Physics.Raycast(origin, along, out RaycastHit line, lean + radius / MinApproachCosine, _mask,
-                QueryTriggerInteraction.Ignore))
+        LeanObstruction lines = _lineSweep.Query(start, direction, maxDistance);
+        if (!lines.Queried) return lines;
+        if (lines.Blocked)
         {
-            float cosine = Mathf.Max(Mathf.Abs(Vector3.Dot(along, line.normal)), MinApproachCosine);
-            travel = Mathf.Min(travel, line.distance - radius / cosine);
+            travel = Mathf.Min(travel, lines.Distance - radius);
         }
 
         if (travel >= lean) return LeanObstruction.Clear;
         return LeanObstruction.Hit(Mathf.Max(travel, 0f) + radius);
+    }
+
+    private LineHit Cast(Vec3 start, Vec3 direction, float length)
+    {
+        if (!Physics.Raycast(new Vector3(start.X, start.Y, start.Z), new Vector3(direction.X, direction.Y, direction.Z),
+                out RaycastHit hit, length, _mask, QueryTriggerInteraction.Ignore))
+        {
+            return LineHit.Miss;
+        }
+
+        Vector3 normal = hit.normal;
+        return LineHit.At(hit.distance, new Vec3(normal.x, normal.y, normal.z));
     }
 }
