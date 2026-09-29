@@ -13,6 +13,7 @@ using CameraUnlock.Core.Config;
 using CameraUnlock.Core.Data;
 using CameraUnlock.Core.Processing;
 using CameraUnlock.Core.Protocol;
+using CameraUnlock.Core.Tracking;
 using Il2CppInterop.Runtime.Injection;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -52,11 +53,10 @@ public class HeadTrackingPlugin : BasePlugin
         BluePrinceConfig config = LoadConfig();
 
         _receiver = new OpenTrackReceiver();
-        TrackingProcessor processor = BuildRotationProcessor(config);
-        PositionProcessor positionProcessor = BuildPositionProcessor(config);
-        var positionInterpolator = new PositionInterpolator();
+        var session = new HeadTrackingSession(
+            _receiver, BuildRotationProcessor(config), BuildPositionProcessor(config));
 
-        CreateBehaviour(_receiver, processor, positionProcessor, positionInterpolator, config, SaveConfig);
+        CreateBehaviour(_receiver, session, config, SaveConfig);
 
         StartReceiver(_receiver, config.UdpPort);
 
@@ -162,9 +162,8 @@ public class HeadTrackingPlugin : BasePlugin
     /// DontDestroyOnLoad. The behaviour is held in a static field so IL2CPP's GC
     /// cannot collect it.
     /// </summary>
-    private static void CreateBehaviour(OpenTrackReceiver receiver, TrackingProcessor processor,
-        PositionProcessor positionProcessor, PositionInterpolator positionInterpolator, BluePrinceConfig config,
-        Action<Action<BluePrinceConfig>> saveConfig)
+    private static void CreateBehaviour(OpenTrackReceiver receiver, HeadTrackingSession session,
+        BluePrinceConfig config, Action<Action<BluePrinceConfig>> saveConfig)
     {
         ClassInjector.RegisterTypeInIl2Cpp<RenderViewInjector>();
         ClassInjector.RegisterTypeInIl2Cpp<HeadTrackingBehaviour>();
@@ -174,7 +173,7 @@ public class HeadTrackingPlugin : BasePlugin
         Object.DontDestroyOnLoad(_behaviourObject);
 
         _behaviour = _behaviourObject.AddComponent<HeadTrackingBehaviour>();
-        _behaviour.Initialize(receiver, processor, positionProcessor, positionInterpolator, config, saveConfig);
+        _behaviour.Initialize(receiver, session, config, saveConfig);
     }
 
     private static void StartReceiver(OpenTrackReceiver receiver, int port)

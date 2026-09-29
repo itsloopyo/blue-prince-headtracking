@@ -9,7 +9,6 @@ using BluePrinceHeadTracking.Input;
 using BluePrinceHeadTracking.State;
 using CameraUnlock.Core.Data;
 using CameraUnlock.Core.Math;
-using CameraUnlock.Core.Processing;
 using CameraUnlock.Core.Protocol;
 using CameraUnlock.Core.Tracking;
 using UnityEngine;
@@ -47,9 +46,7 @@ public class HeadTrackingBehaviour : MonoBehaviour
     private const float MinFlatForwardSqrMagnitude = 1e-6f;
 
     private OpenTrackReceiver? _receiver;
-    private TrackingProcessor? _processor;
-    private PositionProcessor? _positionProcessor;
-    private PositionInterpolator? _positionInterpolator;
+    private HeadTrackingSession? _session;
     private CameraFinder? _cameraFinder;
     private HotkeyHandler? _hotkeyHandler;
     private GameplayStateDetector? _stateDetector;
@@ -63,7 +60,6 @@ public class HeadTrackingBehaviour : MonoBehaviour
     private readonly WindowPlacement _windowPlacement = new();
 
     private bool _trackingEnabled = true;
-    private TrackingMode _trackingMode;
     private bool _positionEnabled = true;
     private bool _rotationEnabled = true;
     private bool _worldSpaceYaw = true;
@@ -75,14 +71,11 @@ public class HeadTrackingBehaviour : MonoBehaviour
     private bool _trackerReceiving;
     private bool _seenTrackerData;
 
-    internal void Initialize(OpenTrackReceiver receiver, TrackingProcessor processor,
-        PositionProcessor positionProcessor, PositionInterpolator positionInterpolator, BluePrinceConfig config,
+    internal void Initialize(OpenTrackReceiver receiver, HeadTrackingSession session, BluePrinceConfig config,
         Action<Action<BluePrinceConfig>> saveConfig)
     {
         _receiver = receiver;
-        _processor = processor;
-        _positionProcessor = positionProcessor;
-        _positionInterpolator = positionInterpolator;
+        _session = session;
         _saveConfig = saveConfig;
 
         _trackingEnabled = config.EnableOnStartup;
@@ -126,16 +119,18 @@ public class HeadTrackingBehaviour : MonoBehaviour
 
         if (newCamera == null)
         {
-            DetachInjector();
+            // The injector stays on the camera's object: every gameplay entry drops the
+            // camera and the next frame finds the same one again.
+            RenderViewInjector.Writer = null;
             _viewWriter.Detach();
             TrackedView.HasActiveViewMatrix = false;
-            ResetSmoothing();
+            _session!.Reset();
             return;
         }
 
         _viewWriter.Attach(newCamera.GetComponent<UnityEngine.Camera>(), newCamera);
         AttachInjector(newCamera.gameObject);
-        ResetSmoothing();
+        _session!.Reset();
     }
 
     /// <summary>
@@ -181,8 +176,7 @@ public class HeadTrackingBehaviour : MonoBehaviour
         {
             HeadTrackingPlugin.Logger.LogInfo("Left gameplay - head tracking paused");
             Deactivate();
-            _processor?.Reset();
-            ResetSmoothing();
+            _session!.Reset();
         }
     }
 
@@ -231,6 +225,11 @@ public class HeadTrackingBehaviour : MonoBehaviour
     {
         if (!_initialized) return;
 
+        // Armed afresh by every frame that tracks, so a throw anywhere below leaves the
+        // frame on the game's own camera and pointer rather than on last frame's view.
+        _viewWriter.Disarm();
+        _reticle.Restore();
+
         if (_cameraFinder!.GetCamera() == null || !_viewWriter.HasCamera)
         {
             Deactivate();
@@ -262,29 +261,25 @@ public class HeadTrackingBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// Computes and applies head tracking for this frame. Returns false when there
-    /// is no fresh tracking data, leaving the camera untouched.
+    /// Computes and applies head tracking for this frame. Returns false when no
+    /// tracker data has arrived since the session was last reset, leaving the camera
+    /// untouched. Once a pose has arrived, a tracker that goes quiet holds the last
+    /// one rather than snapping the view back.
     /// </summary>
     private bool ApplyHeadTracking()
     {
-        TrackingPose rawPose = _receiver!.GetLatestPose();
-        if (!rawPose.IsDataFresh)
+        float dt = Time.deltaTime;
+
+        // Interpolates the tracker's sample rate up to the frame rate, then smooths
+        // with LocalSmoothing or RemoteSmoothing as the sender's address selects.
+        if (!_session!.Update(dt))
         {
             return false;
         }
 
         LogFirstPoseOnce();
 
-        float dt = Time.deltaTime;
-
-        // Locality picks LocalSmoothing over RemoteSmoothing. Re-read every frame so
-        // swapping a local tracker for a phone switches parameter without a restart.
-        bool isRemote = _receiver.IsRemoteConnection;
-        _processor!.IsRemoteConnection = isRemote;
-        _positionProcessor!.IsRemoteConnection = isRemote;
-
-        TrackingPose processed = _processor.Process(rawPose, dt);
-        (float yaw, float pitch, float roll) = ToEngineAngles(processed);
+        (float yaw, float pitch, float roll) = ToEngineAngles(_session.Rotation);
 
         Transform cameraTransform = _viewWriter.Transform!;
         UnityEngine.Camera camera = _viewWriter.Camera!;
@@ -299,7 +294,7 @@ public class HeadTrackingBehaviour : MonoBehaviour
         RigProbe.VerifyProjection(camera, cleanRotation, cleanPosition);
 
         Quaternion renderRotation = ComposeRenderRotation(cleanRotation, yaw, pitch, roll);
-        Vector3 wantedLean = ComputeLeanOffset(cleanRotation, processed, dt);
+        Vector3 wantedLean = ComputeLeanOffset(cleanRotation, _session.PositionOffset);
         Vector3 lean = ClampLean(cleanPosition, wantedLean, camera, dt);
 
         _viewWriter.Write(renderRotation, cleanPosition + lean);
@@ -385,8 +380,8 @@ public class HeadTrackingBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// Runs the tracker's translation through the position pipeline and returns the
-    /// lean as a world-space offset from the clean eye.
+    /// Turns the session's position offset into the lean, as a world-space offset
+    /// from the clean eye.
     ///
     /// The basis is horizon-locked: sideways and forward come from the clean view's
     /// heading flattened onto the ground plane, and up is world up. Taking the
@@ -394,24 +389,16 @@ public class HeadTrackingBehaviour : MonoBehaviour
     /// whenever the player is looking down at something, which in this game is most
     /// of the time.
     /// </summary>
-    private Vector3 ComputeLeanOffset(Quaternion cleanRotation, TrackingPose processed, float dt)
+    private Vector3 ComputeLeanOffset(Quaternion cleanRotation, Vec3 offset)
     {
         if (!_positionEnabled)
         {
             return Vector3.zero;
         }
 
-        PositionData rawPosition = _receiver!.GetLatestPosition();
-        PositionData interpolated = _positionInterpolator!.Update(rawPosition, dt);
-        // The tracker-convention pose, not the engine-space one: the processor uses
-        // it to subtract the arc a face point traces about the neck, which is a
-        // physical property of the tracker rather than of the engine.
-        Quat4 headRotation = QuaternionUtils.FromYawPitchRoll(processed.Yaw, processed.Pitch, processed.Roll);
-
-        // Already box-clamped by the processor against the configured asymmetric
-        // limits ([-LimitYDown, +LimitY], [-LimitZ, +LimitZBack]).
-        Vec3 offset = _positionProcessor!.Process(interpolated, headRotation, dt);
-
+        // Already box-clamped by the session's position processor against the
+        // configured asymmetric limits ([-LimitYDown, +LimitY], [-LimitZ, +LimitZBack]).
+        //
         // The engine boundary for translation. The tracker and Unity agree that
         // positive x is the player's right and positive y is up, so those pass
         // through; the core pipeline's forward lean is NEGATIVE z while Unity's
@@ -486,6 +473,12 @@ public class HeadTrackingBehaviour : MonoBehaviour
     internal void ToggleTracking()
     {
         _trackingEnabled = !_trackingEnabled;
+        if (_trackingEnabled)
+        {
+            // Starts from the next sample rather than blending from the pose held
+            // when tracking was switched off.
+            _session!.Reset();
+        }
         HeadTrackingPlugin.Logger.LogInfo($"Head tracking {(_trackingEnabled ? "ENABLED" : "DISABLED")}");
     }
 
@@ -496,13 +489,11 @@ public class HeadTrackingBehaviour : MonoBehaviour
     /// </summary>
     internal void CycleTrackingMode()
     {
-        SetTrackingMode((TrackingMode)(((int)_trackingMode + 1) % 3));
+        SetTrackingMode((TrackingMode)(((int)_session!.Mode + 1) % 3));
 
         if (!_positionEnabled)
         {
             _leanClamp?.Reset();
-            _positionProcessor?.Reset();
-            _positionInterpolator?.Reset();
         }
 
         HeadTrackingPlugin.Logger.LogInfo(
@@ -520,7 +511,8 @@ public class HeadTrackingBehaviour : MonoBehaviour
 
     private void SetTrackingMode(TrackingMode mode)
     {
-        _trackingMode = mode;
+        // The session resets its own position state when position leaves the mode.
+        _session!.Mode = mode;
         TrackingModeChannels.Encode(mode, out _rotationEnabled, out _positionEnabled);
     }
 
@@ -533,13 +525,6 @@ public class HeadTrackingBehaviour : MonoBehaviour
             $"Yaw mode: {(worldSpaceYaw ? "horizon-locked" : "view-local")}");
 
         _saveConfig!(c => c.WorldSpaceYaw = worldSpaceYaw);
-    }
-
-    private void ResetSmoothing()
-    {
-        _processor?.ResetSmoothing();
-        _positionProcessor?.Reset();
-        _positionInterpolator?.Reset();
     }
 
     private void OnDestroy()

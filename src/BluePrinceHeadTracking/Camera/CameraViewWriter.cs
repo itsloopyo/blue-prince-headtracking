@@ -71,6 +71,12 @@ internal sealed class CameraViewWriter
         TrackedView.Publish(camera, _pendingView, renderRotation, renderPosition);
     }
 
+    /// <summary>Drops the armed view, leaving the camera to the game for this frame's render.</summary>
+    internal void Disarm()
+    {
+        _pending = false;
+    }
+
     /// <summary>
     /// Puts the armed view on the camera. Called from OnPreCull, so the frame is
     /// culled and drawn with it.
